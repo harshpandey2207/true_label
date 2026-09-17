@@ -1,0 +1,9 @@
+dependencies:
+  flutter:
+    sdk: flutter
+  # For beautiful, easy charts
+  fl_chart: ^0.68.0
+  # For highly responsive data tables (better than default DataTable)
+  data_table_2: ^2.3.12
+  # For the sidebar navigation
+  sidebarx: ^0.17.1
