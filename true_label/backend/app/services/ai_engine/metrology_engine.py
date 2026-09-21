@@ -18,8 +18,9 @@ except Exception:
 
 from paddleocr import PaddleOCR
 
-# Initialize PaddleOCR with lightweight settings to fit strictly within free tier memory
+# Initialize PaddleOCR with lightweight PP-OCRv4 mobile models to fit strictly within free tier memory
 ocr = PaddleOCR(
+    ocr_version='PP-OCRv4',
     lang='en',
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
