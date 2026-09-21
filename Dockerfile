@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system dependencies needed for OpenCV, PaddleOCR, and GL libraries
+# Install system libraries for OpenCV, GL, and PaddleOCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
@@ -8,18 +8,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Set up a new user named "user" with UID 1000 (Hugging Face requirement)
+RUN useradd -m -u 1000 user
+USER user
+ENV HOME=/home/user \
+    PATH=/home/user/.local/bin:$PATH \
+    PYTHONPATH=/home/user/app \
+    PYTHONUNBUFFERED=1
+
+WORKDIR $HOME/app
 
 # Copy requirements and install
-COPY true_label/backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --chown=user true_label/backend/requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
 
-# Copy backend source code
-COPY true_label/backend ./backend
+# Copy backend code
+COPY --chown=user true_label/backend ./backend
 
-ENV PYTHONPATH=/app
-ENV PORT=8000
+# Hugging Face Spaces exposes port 7860
+EXPOSE 7860
 
-EXPOSE 8000
-
-CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "7860"]
