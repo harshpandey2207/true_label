@@ -12,5 +12,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {
+        "status": "ONLINE",
+        "service": "True Label Legal Metrology AI Engine",
+        "docs": "/docs"
+    }
+
 # Mount the routes with a clean prefix
 app.include_router(scan_router, prefix="/scan", tags=["Scan"])
