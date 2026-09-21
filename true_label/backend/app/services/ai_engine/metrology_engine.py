@@ -58,7 +58,18 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     if img is None:
         return {"status": "ERROR", "declarations": [], "error": "Could not read image file."}
         
-    h_img, w_img = img.shape[:2]
+    orig_h, orig_w = img.shape[:2]
+    h_img, w_img = orig_h, orig_w
+    
+    # Auto-downscale high-res images to max 960px for sub-5-second inference on free tier CPU
+    max_side = 960
+    scale = 1.0
+    if max(orig_h, orig_w) > max_side:
+        scale = max_side / max(orig_h, orig_w)
+        new_w = int(orig_w * scale)
+        new_h = int(orig_h * scale)
+        img_resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        cv2.imwrite(image_path, img_resized)
 
     # Run OCR inference
     result = ocr.predict(image_path)
@@ -90,7 +101,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         # Calculate bounding box height
         pts = box.tolist() if hasattr(box, 'tolist') else box
         y_coords = [p[1] for p in pts]
-        box_height_px = max(y_coords) - min(y_coords)
+        box_height_px = (max(y_coords) - min(y_coords)) / scale
         
         # Physical height estimate in mm via AR geometry
         height_mm = round((box_height_px * distance_mm) / focal_length_px, 2)
