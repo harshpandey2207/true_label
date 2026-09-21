@@ -18,6 +18,8 @@ __pycache__/
 .pub/
 build/
 **/build/
+!true_label/frontend/build/
+!true_label/frontend/build/web/**
 
 # IDE & OS files
 .idea/

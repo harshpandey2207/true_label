@@ -1,0 +1,4 @@
+mapshaper
+-i india_districts.json
+-filter 'NAME_2=="Andaman Islands" || NAME_2=="Nicobar Islands" || NAME_2=="Indore" || NAME_2=="Bhopal" || NAME_2=="Gwalior"'
+-o highlighted_districts.geojson
