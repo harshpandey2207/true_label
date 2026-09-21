@@ -4,8 +4,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
+  static const String defaultUrl = 'https://true-label-backend.onrender.com';
+
   static String get baseUrl {
-    return dotenv.env['API_BASE_URL'] ?? 'http://localhost:8000';
+    return dotenv.env['API_BASE_URL'] ?? defaultUrl;
   }
 
   static Future<Map<String, dynamic>?> analyzeArScan({
@@ -36,12 +38,16 @@ class ApiService {
         final respStr = await response.stream.bytesToString();
         return jsonDecode(respStr);
       } else {
-        print('Backend error: ${response.statusCode}');
-        return null;
+        return {
+          'status': 'ERROR',
+          'error': 'Backend error (${response.statusCode}). Backend may be waking up, please retry in 30 seconds.',
+        };
       }
     } catch (e) {
-      print('API Exception: $e');
-      return null;
+      return {
+        'status': 'ERROR',
+        'error': 'Connection error: $e',
+      };
     }
   }
 }

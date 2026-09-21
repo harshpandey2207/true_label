@@ -187,7 +187,8 @@ class __ScannerScreenState extends State<_ScannerScreen> {
           _scanState = 2;
         });
       } else {
-        _showError("Failed to get analysis from backend.");
+        final errorMsg = result?['error'] ?? "Failed to get analysis from backend.";
+        _showError(errorMsg);
       }
     } catch (e) {
       _showError("Connection error: $e");
