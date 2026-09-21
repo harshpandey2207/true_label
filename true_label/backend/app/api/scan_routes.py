@@ -27,12 +27,20 @@ async def analyze_ar_scan(
             with open(temp_path, "wb") as buffer:
                 shutil.copyfileobj(image.file, buffer)
             
-            # Run the AI engine analysis on each image using keyword arguments
+            # Run the AI engine analysis on each image
+            try:
                 analysis = analyze_product_label(
                     image_path=temp_path, 
                     distance_mm=distance_mm, 
                     focal_length_px=focal_length_px
                 )
+            except Exception as e:
+                analysis = {
+                    "status": "ERROR",
+                    "error": f"OCR processing failed: {str(e)}",
+                    "declarations": []
+                }
+
             results.append({
                 "filename": image.filename,
                 "analysis": analysis

@@ -18,8 +18,13 @@ except Exception:
 
 from paddleocr import PaddleOCR
 
-# Initialize PaddleOCR
-ocr = PaddleOCR(lang='en')
+# Initialize PaddleOCR with lightweight settings to fit strictly within free tier memory
+ocr = PaddleOCR(
+    lang='en',
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False
+)
 
 OINTMENT_RULES = [
     "mrp",
