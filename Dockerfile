@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 
-# Install system libraries for OpenCV, GL, and PaddleOCR
+# Install system libraries required by OpenCV, GL, and PaddleOCR
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
@@ -8,24 +8,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up a new user named "user" with UID 1000 (Hugging Face requirement)
-RUN useradd -m -u 1000 user
-USER user
-ENV HOME=/home/user \
-    PATH=/home/user/.local/bin:$PATH \
-    PYTHONPATH=/home/user/app \
-    PYTHONUNBUFFERED=1
-
-WORKDIR $HOME/app
+WORKDIR /app
 
 # Copy requirements and install
-COPY --chown=user true_label/backend/requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+COPY true_label/backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend code
-COPY --chown=user true_label/backend ./backend
+COPY true_label/backend ./backend
 
-# Hugging Face Spaces exposes port 7860
-EXPOSE 7860
+ENV PYTHONPATH=/app
+ENV PORT=10000
 
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "7860"]
+EXPOSE 10000
+
+# Start uvicorn dynamically binding to the port provided by Render ($PORT)
+CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
