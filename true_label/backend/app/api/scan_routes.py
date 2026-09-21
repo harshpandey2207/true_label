@@ -1,6 +1,6 @@
-import shutil
-import uuid
 import os
+import shutil
+import tempfile
 from typing import List
 from fastapi import APIRouter, UploadFile, File, Form
 from backend.app.services.ai_engine.metrology_engine import analyze_product_label
@@ -9,8 +9,8 @@ from backend.app.services.ai_engine.metrology_engine import analyze_product_labe
 router = APIRouter(tags=["Scanner"])
 
 @router.post("/analyze-ar")
-async def analyze_ar_scan(
-    images: List[UploadFile] = File(...),   # <--- Changed to accept multiple files
+def analyze_ar_scan(
+    images: List[UploadFile] = File(...),
     distance_mm: float = Form(300.0),      
     focal_length_px: float = Form(1050.0)   
 ):
@@ -19,13 +19,14 @@ async def analyze_ar_scan(
     
     try:
         for image in images:
-            # Cross-platform temporary path for each individual image
-            temp_filename = f"{uuid.uuid4()}_{image.filename}"
-            temp_path = os.path.join(os.getcwd(), temp_filename)
+            # Safe temporary file in OS temp folder
+            suffix = os.path.splitext(image.filename or ".jpg")[1]
+            if not suffix:
+                suffix = ".jpg"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                shutil.copyfileobj(image.file, tmp)
+                temp_path = tmp.name
             temp_paths.append(temp_path)
-            
-            with open(temp_path, "wb") as buffer:
-                shutil.copyfileobj(image.file, buffer)
             
             # Run the AI engine analysis on each image
             try:

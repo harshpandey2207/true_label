@@ -61,8 +61,8 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     orig_h, orig_w = img.shape[:2]
     h_img, w_img = orig_h, orig_w
     
-    # Auto-downscale high-res images to max 960px for sub-5-second inference on free tier CPU
-    max_side = 960
+    # Auto-downscale high-res images to max 800px for sub-4-second inference on free tier CPU
+    max_side = 800
     scale = 1.0
     if max(orig_h, orig_w) > max_side:
         scale = max_side / max(orig_h, orig_w)

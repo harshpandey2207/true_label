@@ -17,6 +17,7 @@ def root():
     return {
         "status": "ONLINE",
         "service": "True Label Legal Metrology AI Engine",
+        "version": "1.2.0",
         "docs": "/docs"
     }
 
