@@ -10,6 +10,13 @@ class ApiService {
     return dotenv.env['API_BASE_URL'] ?? defaultUrl;
   }
 
+  /// Fire-and-forget pre-warming ping to wake up backend if it was sleeping
+  static void preWarmBackend() {
+    try {
+      http.get(Uri.parse('$baseUrl/')).catchError((_) => http.Response('', 500));
+    } catch (_) {}
+  }
+
   static Future<Map<String, dynamic>?> analyzeArScan({
     required List<XFile> imageFiles, // <--- Accepts a list of images now
     required double distanceMm,

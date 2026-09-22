@@ -3,6 +3,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'core/theme_provider.dart';
+import 'core/api_service.dart';
 import 'features/auth/login_screen.dart';
 
 Future<void> main() async {
@@ -12,6 +13,9 @@ Future<void> main() async {
   } catch (e) {
     debugPrint("Could not load .env file: $e");
   }
+  
+  // Asynchronously wake up or ping backend container immediately upon app open
+  ApiService.preWarmBackend();
   
   runApp(
     ChangeNotifierProvider(
