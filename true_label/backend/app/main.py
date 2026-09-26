@@ -12,7 +12,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
         "status": "ONLINE",
@@ -20,6 +20,10 @@ def root():
         "version": "1.2.0",
         "docs": "/docs"
     }
+
+@app.api_route("/health", methods=["GET", "HEAD"])
+def health_check():
+    return {"status": "HEALTHY"}
 
 # Mount the routes with a clean prefix
 app.include_router(scan_router, prefix="/scan", tags=["Scan"])
