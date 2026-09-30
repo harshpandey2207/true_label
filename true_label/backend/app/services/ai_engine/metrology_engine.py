@@ -11,19 +11,21 @@ import cv2
 import re
 from typing import Dict, Any
 
-from paddleocr import PaddleOCR
-
-# PP-OCRv4 mobile models — lightweight, fast on CPU.
-# text_det_limit_side_len=500 caps the detection grid for fast sub-25s inference on cloud CPU
-ocr = PaddleOCR(
-    ocr_version='PP-OCRv4',
-    lang='en',
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    use_textline_orientation=False,
-    text_det_limit_side_len=500,
-    text_det_limit_type='max',
-)
+try:
+    from paddleocr import PaddleOCR
+    # PP-OCRv4 mobile models — lightweight, fast on CPU.
+    ocr = PaddleOCR(
+        ocr_version='PP-OCRv4',
+        lang='en',
+        use_doc_orientation_classify=False,
+        use_doc_unwarping=False,
+        use_textline_orientation=False,
+        text_det_limit_side_len=500,
+        text_det_limit_type='max',
+    )
+except Exception as e:
+    print(f"PaddleOCR disabled due to environment issue: {e}")
+    ocr = None
 
 OINTMENT_RULES = [
     "mrp",
