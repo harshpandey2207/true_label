@@ -13,16 +13,17 @@ from typing import Dict, Any
 
 try:
     from paddleocr import PaddleOCR
-    # PP-OCRv4 mobile models — lightweight, fast on CPU.
-    ocr = PaddleOCR(
-        ocr_version='PP-OCRv4',
-        lang='en',
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        use_textline_orientation=False,
-        text_det_limit_side_len=500,
-        text_det_limit_type='max',
-    )
+    # PP-OCRv4 mobile models disabled to prevent Render 512MB OOM crash (using OCR.space bypass)
+    # ocr = PaddleOCR(
+    #     ocr_version='PP-OCRv4',
+    #     lang='en',
+    #     use_doc_orientation_classify=False,
+    #     use_doc_unwarping=False,
+    #     use_textline_orientation=False,
+    #     text_det_limit_side_len=500,
+    #     text_det_limit_type='max',
+    # )
+    ocr = None
 except Exception as e:
     print(f"PaddleOCR disabled due to environment issue: {e}")
     ocr = None
