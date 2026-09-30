@@ -220,6 +220,28 @@ class __ScannerScreenState extends State<_ScannerScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('AR Metrology Scanner', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+        SizedBox(height: 12),
+        Container(
+          padding: EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.blue.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.info_outline, color: Colors.blue, size: 20),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Demo Notice: True Label utilizes PaddleOCR (open-source) in production. To bypass free-tier CPU constraints and ensure fast 3-second evaluation for judges, this live web demo temporarily routes inference through a lightweight cloud API.',
+                  style: TextStyle(color: textMuted, fontSize: 12, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
         SizedBox(height: 16),
         
         Container(

@@ -1,6 +1,9 @@
-# true_label
+# True Label: Legal Metrology AI Engine
 
-A new Flutter project.
+True Label is an advanced legal metrology and AI-powered product label compliance scanner. It uses computer vision and AR to verify packaged commodities against Legal Metrology Rules (MRP, Manufacturing Date, Net Quantity, Manufacturer details, etc.).
+
+> **Architecture Notice (Live Demo)**
+> The core open-source architecture of True Label utilizes PaddleOCR (PP-OCRv4) to handle complex metrology extraction and AR bounding boxes. Due to the high compute constraints (0.1 vCPU limits) of our free-tier hosting which cause 2-5 minute processing delays, this live web demo temporarily routes inference through a lightweight cloud API to ensure fast evaluation for the judges. You can view our full open-source PaddleOCR fallback implementation in `backend/app/services/ai_engine/metrology_engine.py`.
 
 ## Getting Started
 
