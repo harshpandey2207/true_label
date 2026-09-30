@@ -14,15 +14,14 @@ from typing import Dict, Any
 from paddleocr import PaddleOCR
 
 # PP-OCRv4 mobile models — lightweight, fast on CPU.
-# text_det_limit_side_len=640 caps the detection grid so inference stays under ~5s
-# on Render's 0.1 vCPU. Disabling doc orientation/unwarping saves another ~40%.
+# text_det_limit_side_len=500 caps the detection grid for fast sub-25s inference on cloud CPU
 ocr = PaddleOCR(
     ocr_version='PP-OCRv4',
     lang='en',
     use_doc_orientation_classify=False,
     use_doc_unwarping=False,
     use_textline_orientation=False,
-    text_det_limit_side_len=640,
+    text_det_limit_side_len=500,
     text_det_limit_type='max',
 )
 
@@ -60,8 +59,8 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     orig_h, orig_w = img.shape[:2]
     h_img, w_img = orig_h, orig_w
     
-    # Auto-downscale high-res images to max 640px — consistent with det_limit_side_len
-    max_side = 640
+    # Auto-downscale high-res images to max 500px for fast ~20-25s inference
+    max_side = 500
     scale = 1.0
     if max(orig_h, orig_w) > max_side:
         scale = max_side / max(orig_h, orig_w)
@@ -70,17 +69,32 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         img_resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         cv2.imwrite(image_path, img_resized)
 
-    # Run OCR inference using 2.x API: ocr.ocr() returns list-of-lines
-    # Each line: [[box_points], (text, confidence)]
-    result = ocr.ocr(image_path, cls=False)
-
+    # Run OCR inference: robust to both predict() (3.x) and ocr() (2.x) APIs
     parsed_lines = []
-    if result and result[0] is not None:
-        for line in result[0]:
-            box = line[0]          # [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
-            text = str(line[1][0]).strip()
-            conf = float(line[1][1])
-            parsed_lines.append((box, text, conf))
+    if hasattr(ocr, 'predict'):
+        try:
+            result = ocr.predict(image_path)
+            if result and len(result) > 0:
+                for res in result:
+                    boxes = res.get('dt_polys', [])
+                    texts = res.get('rec_texts', [])
+                    scores = res.get('rec_scores', [])
+                    for box, text, conf in zip(boxes, texts, scores):
+                        parsed_lines.append((box, str(text).strip(), float(conf)))
+        except Exception:
+            pass
+
+    if len(parsed_lines) == 0 and hasattr(ocr, 'ocr'):
+        try:
+            result = ocr.ocr(image_path, cls=False)
+            if result and result[0] is not None:
+                for line in result[0]:
+                    box = line[0]
+                    text = str(line[1][0]).strip()
+                    conf = float(line[1][1])
+                    parsed_lines.append((box, text, conf))
+        except Exception:
+            pass
 
     misleading_patterns = [
         r"\bminimum\s+\d+(?:[.,]\d+)?",
