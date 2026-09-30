@@ -90,7 +90,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
                 'isOverlayRequired': 'true',
                 'OCREngine': '2' # Engine 2 is optimized for numbers/product labels
             },
-            timeout=10
+            timeout=30
         )
         data = res.json()
         if data and not data.get('IsErroredOnProcessing'):
