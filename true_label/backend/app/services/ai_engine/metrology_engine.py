@@ -54,7 +54,7 @@ FIELD_MESSAGES = {
     "no_misleading_quantity": "Quantity declaration must not be misleading."
 }
 
-def analyze_product_label(image_path: str, product_type: str = "ointment", distance_mm: float = 300.0, focal_length_px: float = 800.0) -> Dict[str, Any]:
+def analyze_product_label(image_path: str, product_type: str = "ointment", distance_mm: float = 300.0, focal_length_px: float = 800.0, db=None) -> Dict[str, Any]:
     img = cv2.imread(image_path)
     if img is None:
         return {"status": "ERROR", "declarations": [], "error": "Could not read image file."}
@@ -232,6 +232,19 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
             for pt in pts
         ]
 
+        # Determine dynamic message from Database Rules
+        db_message = "Declaration verified."
+        if db is not None:
+            # Query the database for the specific compliance rule
+            from backend.app.db.models import ComplianceRule
+            rule = db.query(ComplianceRule).filter(ComplianceRule.tag == tag.upper()).first()
+            if rule and rule.legal_act_reference:
+                db_message = f"Verified via DB: {rule.legal_act_reference}"
+            else:
+                db_message = FIELD_MESSAGES.get(tag, "Declaration verified.")
+        else:
+            db_message = FIELD_MESSAGES.get(tag, "Declaration verified.")
+
         declarations.append({
             "text": text,
             "tag": tag.upper(),
@@ -240,7 +253,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
             "box": scaled_box,
             "height_mm": height_mm,
             "is_compliant": is_compliant,
-            "message": failure_reason if failure_reason else FIELD_MESSAGES.get(tag, "Declaration verified."),
+            "message": failure_reason if failure_reason else db_message,
             "failure_reason": failure_reason
         })
 
