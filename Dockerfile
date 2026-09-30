@@ -11,11 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy requirements and install
-COPY true_label/backend/requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --force-reinstall -r requirements.txt
 
 # Copy backend code
-COPY true_label/backend ./backend
+COPY backend ./backend
 
 # Pre-cache PaddleOCR lightweight PP-OCRv4 mobile models so runtime has 0 download latency & fits in 512MB RAM
 # (Removed pre-cache step to bypass Render cache glitch)
