@@ -481,10 +481,20 @@ class _InteractiveGeographicHeatmapState extends State<InteractiveGeographicHeat
             onPointerHover: (e) => _onHover(e, size),
             child: Stack(
               children: [
-                // ── Canvas layer — repaints only when _hover changes ──────
+                // ── Static Canvas layer — NEVER repaints, caches map ──────
+                RepaintBoundary(
+                  child: CustomPaint(
+                    size: size,
+                    painter: _IndiaStaticPainter(
+                      shapes: _shapes,
+                      isDark: isDark,
+                    ),
+                  ),
+                ),
+                // ── Hover Canvas layer — incredibly fast, draws 1 state ──────
                 CustomPaint(
                   size: size,
-                  painter: _IndiaChoroplethPainter(
+                  painter: _IndiaHoverPainter(
                     shapes: _shapes,
                     hoverNotifier: _hover,
                     isDark: isDark,
@@ -658,43 +668,67 @@ class _StateShape {
 }
 
 // ─── CustomPainter — repaint driven by ValueNotifier, not setState ────────────
-class _IndiaChoroplethPainter extends CustomPainter {
+class _IndiaStaticPainter extends CustomPainter {
   final List<_StateShape> shapes;
-  final ValueNotifier<_HoverState> hoverNotifier;
   final bool isDark;
 
-  _IndiaChoroplethPainter({
-    required this.shapes,
-    required this.hoverNotifier,
-    required this.isDark,
-  }) : super(repaint: hoverNotifier);  // ← only repaints when hover changes
+  _IndiaStaticPainter({required this.shapes, required this.isDark});
 
   @override
   void paint(Canvas canvas, Size size) {
     final strokeNormal = isDark ? Colors.white24 : Colors.black26;
-    final strokeHover  = isDark ? Colors.white   : Colors.black87;
-    final hovered      = hoverNotifier.value.idx;
 
     for (int i = 0; i < shapes.length; i++) {
       final shape = shapes[i];
-      final isHovered = hovered == i;
       final path = shape.getPath(size);
 
       canvas.drawPath(path, Paint()
-        ..color = shape.fillColor.withAlpha(isHovered ? 230 : 175)
+        ..color = shape.fillColor.withAlpha(175)
         ..style = PaintingStyle.fill);
 
       canvas.drawPath(path, Paint()
-        ..color = isHovered ? strokeHover : strokeNormal
+        ..color = strokeNormal
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isHovered ? 1.8 : 0.5);
+        ..strokeWidth = 0.5);
     }
   }
 
   @override
-  bool shouldRepaint(_IndiaChoroplethPainter old) => old.isDark != isDark;
-  // Note: hover repaints are handled by the `repaint: hoverNotifier` above,
-  // so shouldRepaint only needs to catch theme changes.
+  bool shouldRepaint(covariant _IndiaStaticPainter oldDelegate) => oldDelegate.isDark != isDark;
+}
+
+class _IndiaHoverPainter extends CustomPainter {
+  final List<_StateShape> shapes;
+  final ValueNotifier<_HoverState> hoverNotifier;
+  final bool isDark;
+
+  _IndiaHoverPainter({
+    required this.shapes,
+    required this.hoverNotifier,
+    required this.isDark,
+  }) : super(repaint: hoverNotifier);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final hovered = hoverNotifier.value.idx;
+    if (hovered == null || hovered < 0 || hovered >= shapes.length) return;
+
+    final shape = shapes[hovered];
+    final path = shape.getPath(size);
+    final strokeHover = isDark ? Colors.white : Colors.black87;
+
+    canvas.drawPath(path, Paint()
+      ..color = shape.fillColor.withAlpha(230)
+      ..style = PaintingStyle.fill);
+
+    canvas.drawPath(path, Paint()
+      ..color = strokeHover
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8);
+  }
+
+  @override
+  bool shouldRepaint(covariant _IndiaHoverPainter oldDelegate) => oldDelegate.isDark != isDark;
 }
 
 
