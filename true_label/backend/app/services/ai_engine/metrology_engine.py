@@ -1,30 +1,29 @@
+import os
+# CRITICAL: Must be set BEFORE any paddle/paddleocr import.
+# PaddlePaddle 3.x has a PIR executor conflict with oneDNN on CPU that causes
+# NotImplementedError: ConvertPirAttribute2RuntimeAttribute
+# This disables the broken code path entirely and restores fast CPU inference.
+os.environ["FLAGS_use_mkldnn"] = "0"
+os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
+os.environ["FLAGS_new_executor_micro_batching"] = "0"
+
 import cv2
 import re
-import os
 from typing import Dict, Any
-
-# Ensure compatibility and disable MKLDNN/oneDNN issues with new PIR executor on CPU
-try:
-    import paddlex.inference.models.runners.paddle_static.runner as runner_mod
-    orig_create = runner_mod.PaddleStaticRunner._create
-    def safe_create(self, *args, **kwargs):
-        self._config['run_mode'] = 'paddle'
-        return orig_create(self, *args, **kwargs)
-    runner_mod.PaddleStaticRunner._create = safe_create
-    import paddle.inference as p_inf
-    p_inf.Config.enable_mkldnn = lambda self: None
-except Exception:
-    pass
 
 from paddleocr import PaddleOCR
 
-# Initialize PaddleOCR with lightweight PP-OCRv4 mobile models to fit strictly within free tier memory
+# PP-OCRv4 mobile models — lightweight, fast on CPU.
+# det_limit_side_len=640: caps the detection grid so inference stays under 5s
+# on Render's 0.1 vCPU free tier. use_angle_cls=False saves another ~30%.
 ocr = PaddleOCR(
     ocr_version='PP-OCRv4',
     lang='en',
-    use_doc_orientation_classify=False,
-    use_doc_unwarping=False,
-    use_textline_orientation=False
+    use_angle_cls=False,
+    use_gpu=False,
+    det_limit_side_len=640,
+    det_limit_type='max',
+    show_log=False,
 )
 
 OINTMENT_RULES = [
@@ -61,8 +60,8 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     orig_h, orig_w = img.shape[:2]
     h_img, w_img = orig_h, orig_w
     
-    # Auto-downscale high-res images to max 800px for sub-4-second inference on free tier CPU
-    max_side = 800
+    # Auto-downscale high-res images to max 640px — consistent with det_limit_side_len
+    max_side = 640
     scale = 1.0
     if max(orig_h, orig_w) > max_side:
         scale = max_side / max(orig_h, orig_w)
@@ -71,17 +70,17 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         img_resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         cv2.imwrite(image_path, img_resized)
 
-    # Run OCR inference
-    result = ocr.predict(image_path)
-    
+    # Run OCR inference using 2.x API: ocr.ocr() returns list-of-lines
+    # Each line: [[box_points], (text, confidence)]
+    result = ocr.ocr(image_path, cls=False)
+
     parsed_lines = []
-    if result and len(result) > 0:
-        for res in result:
-            boxes = res.get('dt_polys', [])
-            texts = res.get('rec_texts', [])
-            scores = res.get('rec_scores', [])
-            for box, text, conf in zip(boxes, texts, scores):
-                parsed_lines.append((box, str(text).strip(), float(conf)))
+    if result and result[0] is not None:
+        for line in result[0]:
+            box = line[0]          # [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
+            text = str(line[1][0]).strip()
+            conf = float(line[1][1])
+            parsed_lines.append((box, text, conf))
 
     misleading_patterns = [
         r"\bminimum\s+\d+(?:[.,]\d+)?",
