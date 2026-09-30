@@ -456,13 +456,28 @@ class _InteractiveGeographicHeatmapState extends State<InteractiveGeographicHeat
   void _onHover(PointerEvent e, Size size) {
     final pos = e.localPosition;
     int? found;
-    for (int i = 0; i < _shapes.length; i++) {
-      if (_shapes[i].hitTest(pos, size)) { found = i; break; }
-    }
-    // Only notify when the hovered state actually changes — saves repaints
     final current = _hover.value;
-    if (current.idx != found || (found != null && current.pos != pos)) {
+
+    // Fast-path: 99% of the time, mouse is in the SAME state. 
+    // Checking current first skips 34 complex polygon ray-casts!
+    if (current.idx != null && _shapes[current.idx!].hitTest(pos, size)) {
+      found = current.idx;
+    } else {
+      for (int i = 0; i < _shapes.length; i++) {
+        if (_shapes[i].hitTest(pos, size)) { found = i; break; }
+      }
+    }
+
+    // Only trigger heavy DOM/Canvas layout rebuilding if the state CHANGED,
+    // or if the mouse moved more than 20 pixels (debounces 60fps tooltips).
+    if (current.idx != found) {
       _hover.value = (idx: found, pos: pos);
+    } else if (found != null) {
+      final dx = (pos.dx - current.pos.dx).abs();
+      final dy = (pos.dy - current.pos.dy).abs();
+      if (dx > 20 || dy > 20) {
+        _hover.value = (idx: found, pos: pos);
+      }
     }
   }
 
