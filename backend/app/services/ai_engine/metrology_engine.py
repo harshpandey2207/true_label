@@ -54,7 +54,7 @@ FIELD_MESSAGES = {
     "no_misleading_quantity": "Quantity declaration must not be misleading."
 }
 
-def analyze_product_label(image_path: str, product_type: str = "ointment", distance_mm: float = 300.0, focal_length_px: float = 800.0, db=None) -> Dict[str, Any]:
+def analyze_product_label(image_path: str, product_type: str = "ointment", distance_mm: float = 300.0, focal_length_px: float = 800.0, db=None, category_id: int = 1) -> Dict[str, Any]:
     img = cv2.imread(image_path)
     if img is None:
         return {"status": "ERROR", "declarations": [], "error": "Could not read image file."}
@@ -232,12 +232,12 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
             for pt in pts
         ]
 
-        # Determine dynamic message from Database Rules
+    # Determine dynamic message from Database Rules
         db_message = "Declaration verified."
         if db is not None:
             # Query the database for the specific compliance rule
             from backend.app.db.models import ComplianceRule
-            rule = db.query(ComplianceRule).filter(ComplianceRule.tag == tag.upper()).first()
+            rule = db.query(ComplianceRule).filter(ComplianceRule.tag == tag.upper(), ComplianceRule.category_id == category_id).first()
             if rule and rule.legal_act_reference:
                 db_message = f"Verified via DB: {rule.legal_act_reference}"
             else:
@@ -257,12 +257,22 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
             "failure_reason": failure_reason
         })
 
-    status = "NON_COMPLIANT" if (len(declarations) == 0 or any(not d["is_compliant"] for d in declarations)) else "COMPLIANT"
+    # Check missing mandatory tags against the Database
+    missing_tags = []
+    if db is not None:
+        from backend.app.db.models import ComplianceRule
+        mandatory_rules = db.query(ComplianceRule).filter(ComplianceRule.category_id == category_id, ComplianceRule.is_mandatory == True).all()
+        mandatory_tags = {r.tag for r in mandatory_rules}
+        found_tags = {d["tag"].upper() for d in declarations}
+        missing_tags = list(mandatory_tags - found_tags)
+    
+    status = "NON_COMPLIANT" if (len(declarations) == 0 or len(missing_tags) > 0 or any(not d["is_compliant"] for d in declarations)) else "COMPLIANT"
     
     return {
         "status": status,
         "product_type": product_type,
         "declarations": declarations,
+        "missing_tags": missing_tags,
         "ar_parameters": {
             "distance_mm": distance_mm,
             "focal_length_px": focal_length_px

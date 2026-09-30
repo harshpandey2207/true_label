@@ -21,12 +21,14 @@ class ApiService {
     required List<XFile> imageFiles, // <--- Accepts a list of images now
     required double distanceMm,
     required double focalLengthPx,
+    required int categoryId,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/scan/analyze-ar'));
       
       request.fields['distance_mm'] = distanceMm.toString();
       request.fields['focal_length_px'] = focalLengthPx.toString();
+      request.fields['category_id'] = categoryId.toString();
 
       // Loop through all selected images and append them to the multipart request
       for (var imageFile in imageFiles) {

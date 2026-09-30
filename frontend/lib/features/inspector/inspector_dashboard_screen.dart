@@ -128,7 +128,7 @@ class _ScannerScreen extends StatefulWidget {
 class __ScannerScreenState extends State<_ScannerScreen> {
   int _scanState = 0; 
   String _processingText = "Initializing AR Camera...";
-  String _selectedCategory = 'Cosmetics & Pharma Goods';
+  String _selectedCategory = 'General Packaged Commodity';
   
   final List<XFile> _capturedImages = []; 
   List<dynamic>? _analysisResults; 
@@ -136,11 +136,11 @@ class __ScannerScreenState extends State<_ScannerScreen> {
   final ImagePicker _picker = ImagePicker();
   
   final List<String> _productCategories = [
-    'Packaged Drinking Water (Pre-packaged Commodities)',
-    'Electronics & Household Appliances',
-    'Cosmetics & Pharma Goods',
-    'Textiles & Apparel Measure',
-    'Agricultural Commodities & Seeds'
+    'General Packaged Commodity',
+    'Food & Beverages',
+    'Electronics & Appliances',
+    'Cosmetics & Toiletries',
+    'Apparel & Textiles',
   ];
 
   Future<void> _pickCameraImage() async {
@@ -182,6 +182,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
         imageFiles: _capturedImages,
         distanceMm: 300.0,
         focalLengthPx: 800.0,
+        categoryId: _productCategories.indexOf(_selectedCategory) + 1,
       );
 
       if (result != null && result['status'] == 'SUCCESS') {

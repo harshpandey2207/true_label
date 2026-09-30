@@ -16,6 +16,7 @@ def analyze_ar_scan(
     images: List[UploadFile] = File(...),
     distance_mm: float = Form(300.0),      
     focal_length_px: float = Form(1050.0),
+    category_id: int = Form(1),
     db: Session = Depends(get_db)
 ):
     results = []
@@ -23,7 +24,6 @@ def analyze_ar_scan(
     
     try:
         for image in images:
-            # Safe temporary file in OS temp folder
             suffix = os.path.splitext(image.filename or ".jpg")[1]
             if not suffix:
                 suffix = ".jpg"
@@ -32,13 +32,13 @@ def analyze_ar_scan(
                 temp_path = tmp.name
             temp_paths.append(temp_path)
             
-            # Run the AI engine analysis on each image
             try:
                 analysis = analyze_product_label(
                     image_path=temp_path, 
                     distance_mm=distance_mm, 
                     focal_length_px=focal_length_px,
-                    db=db
+                    db=db,
+                    category_id=category_id
                 )
             except Exception as e:
                 analysis = {
@@ -57,22 +57,19 @@ def analyze_ar_scan(
                 is_compliant = analysis.get("status") == "COMPLIANT"
                 declarations = analysis.get("declarations", [])
                 
-                # Determine missing tags for logging
-                found_tags = {d["tag"].upper() for d in declarations if d["tag"] != "GENERAL"}
-                mandatory = {"MRP", "NET_QUANTITY", "MANUFACTURER", "MANUFACTURING_DATE"}
-                missing = list(mandatory - found_tags)
+                # Missing tags are determined dynamically by the engine now
+                missing = analysis.get("missing_tags", [])
                 
-                # Default category 1 (General Packaged Commodity)
                 try:
                     log_scan_result(
                         db=db, 
-                        category_id=1, 
+                        category_id=category_id, 
                         is_compliant=is_compliant, 
                         missing_tags=missing, 
                         confidence_score=0.99
                     )
                 except Exception:
-                    pass # Failsafe so DB errors don't break the scan
+                    pass
             
         return {
             "status": "SUCCESS",
@@ -81,7 +78,6 @@ def analyze_ar_scan(
         }
         
     finally:
-        # Clean up all temporary files safely after processing
         for temp_path in temp_paths:
             if os.path.exists(temp_path):
                 try:
