@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Copy requirements and install
 COPY true_label/backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --force-reinstall -r requirements.txt
 
 # Copy backend code
 COPY true_label/backend ./backend
@@ -27,3 +27,6 @@ EXPOSE 10000
 
 # Start uvicorn dynamically binding to the port provided by Render ($PORT)
 CMD ["sh", "-c", "uvicorn backend.app.main:app --host 0.0.0.0 --port ${PORT:-10000}"]
+
+# Wipe cache completely to avoid zlib corruption
+RUN pip cache purge
