@@ -139,7 +139,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
     'General Packaged Commodity',
     'Food & Beverages',
     'Electronics & Appliances',
-    'Cosmetics & Toiletries',
+    'Cosmetics, Ointments & Pharma Goods',
     'Apparel & Textiles',
   ];
 
@@ -439,8 +439,20 @@ class __ScannerScreenState extends State<_ScannerScreen> {
                   ),
                   SizedBox(width: 16),
                   ElevatedButton.icon(
-                    onPressed: () {
-                      ReportViewer.showPdfDialog(context: context, reportId: 'RPT-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}', product: _selectedCategory, violation: missingTags.isNotEmpty ? missingTags.join(', ') : 'None');
+                    onPressed: () async {
+                      List<Uint8List> proofBytes = [];
+                      for (var img in _capturedImages) {
+                        proofBytes.add(await img.readAsBytes());
+                      }
+                      if (context.mounted) {
+                        ReportViewer.showPdfDialog(
+                          context: context, 
+                          reportId: 'RPT-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}', 
+                          product: _selectedCategory, 
+                          violation: missingTags.isNotEmpty ? missingTags.join(', ') : 'None',
+                          proofImages: proofBytes,
+                        );
+                      }
                     },
                     icon: Icon(Icons.picture_as_pdf, color: Colors.white),
                     label: Text('Open Report PDF', style: TextStyle(color: Colors.white)),

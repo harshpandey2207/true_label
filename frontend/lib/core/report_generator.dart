@@ -9,6 +9,7 @@ class ReportGenerator {
     required String violation,
     required bool isCompliant,
     required String timestamp,
+    List<Uint8List>? proofImages,
   }) async {
     final pdf = pw.Document(
       title: 'Legal Metrology Report - $reportId',
@@ -146,7 +147,7 @@ class ReportGenerator {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('True Label Inspector App v2.4.0', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey500)),
-                  pw.Text('Page 1 of 1', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey500)),
+                  pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey500)),
                 ],
               )
             ],
@@ -154,6 +155,56 @@ class ReportGenerator {
         },
       ),
     );
+
+    // If proof images are provided, add a new MultiPage to display them
+    if (proofImages != null && proofImages.isNotEmpty) {
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          header: (pw.Context context) {
+            return pw.Container(
+              alignment: pw.Alignment.centerLeft,
+              padding: const pw.EdgeInsets.only(bottom: 10),
+              margin: const pw.EdgeInsets.only(bottom: 20),
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: PdfColors.grey400, width: 2)),
+              ),
+              child: pw.Text(
+                'PROOF IMAGES', 
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold, color: PdfColors.blue900)
+              ),
+            );
+          },
+          build: (pw.Context context) {
+            return proofImages.map((imgBytes) {
+              final image = pw.MemoryImage(imgBytes);
+              return pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 20),
+                alignment: pw.Alignment.center,
+                child: pw.Image(image, fit: pw.BoxFit.contain, height: 400),
+              );
+            }).toList();
+          },
+          footer: (pw.Context context) {
+            return pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                pw.Divider(color: PdfColors.grey400),
+                pw.SizedBox(height: 5),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('True Label Inspector App v2.4.0', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey500)),
+                    pw.Text('Page ${context.pageNumber} of ${context.pagesCount}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey500)),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
 
     return pdf.save();
   }

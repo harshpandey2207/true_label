@@ -15,7 +15,7 @@ def init_db(db: Session):
     # 3. Electronics & Appliances
     cat_electronics = ProductCategory(name="Electronics & Appliances", description="Electronic devices (Legal Metrology + BIS/E-Waste)")
     # 4. Cosmetics & Toiletries
-    cat_cosmetics = ProductCategory(name="Cosmetics & Toiletries", description="Personal care items (Drugs & Cosmetics Act + Metrology)")
+    cat_cosmetics = ProductCategory(name="Cosmetics, Ointments & Pharma Goods", description="Personal care items (Drugs & Cosmetics Act + Metrology)")
     # 5. Apparel & Textiles
     cat_textiles = ProductCategory(name="Apparel & Textiles", description="Clothing and garments")
 

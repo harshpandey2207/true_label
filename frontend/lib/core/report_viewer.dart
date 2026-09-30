@@ -9,6 +9,7 @@ class ReportViewer {
     required String reportId,
     required String product,
     required String violation,
+    List<Uint8List>? proofImages,
   }) {
     showDialog(
       context: context,
@@ -61,6 +62,7 @@ class ReportViewer {
                       violation: violation,
                       isCompliant: violation == 'None' || violation.isEmpty,
                       timestamp: 'October 16, 2026',
+                      proofImages: proofImages,
                     ),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
