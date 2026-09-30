@@ -6,6 +6,7 @@ import '../admin/mock_data.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart'; // for Uint8List // REQUIRED IMPORT
+import '../../core/report_viewer.dart';
 
 class ManufacturerDashboard extends StatefulWidget {
   const ManufacturerDashboard({super.key});
@@ -396,7 +397,13 @@ class _BusinessOwnerRepositoryScreen extends StatelessWidget {
                 leading: Icon(isFlagged ? Icons.warning : Icons.check_circle, color: isFlagged ? Colors.redAccent : Colors.greenAccent),
                 title: Text('Internal Audit Scan #${1024 + index}', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
                 subtitle: Text('Status: ${log['status']} Ledger Record', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-                trailing: Icon(Icons.download, color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, size: 20),
+                trailing: IconButton(
+                  icon: Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
+                  tooltip: 'View Report PDF',
+                  onPressed: () {
+                    ReportViewer.showPdfDialog(context: context, reportId: 'AUDIT-${1024 + index}', product: 'AquaPure 1L Water Bottle', violation: isFlagged ? 'Missing MRP (Rule 6)' : 'None');
+                  },
+                ),
               );
             },
           ),

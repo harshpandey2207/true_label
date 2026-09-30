@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:provider/provider.dart';
 import '../../core/theme_provider.dart';
 import 'package:sidebarx/sidebarx.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:printing/printing.dart';
+import '../../core/report_generator.dart';
+import '../../core/report_viewer.dart';
 import 'mock_data.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -1096,7 +1100,7 @@ class _ReportRepositoryScreen extends StatelessWidget {
                   ),
                   trailing: IconButton(
                     icon: Icon(Icons.visibility, color: Colors.blueAccent),
-                    onPressed: () => _showMockPdfDialog(context, v['id'], v['product'], v['violation']),
+                    onPressed: () => ReportViewer.showPdfDialog(context: context, reportId: v['id'], product: v['product'], violation: v['violation']),
                     tooltip: 'View PDF Report',
                   ),
                 );
@@ -1108,82 +1112,6 @@ class _ReportRepositoryScreen extends StatelessWidget {
     );
   }
 
-  void _showMockPdfDialog(BuildContext context, String id, String product, String violationStr) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        final screenWidth = MediaQuery.of(context).size.width;
-        final theme = Theme.of(context);
-        final screenHeight = MediaQuery.of(context).size.height;
-        
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            width: screenWidth * 0.95,
-            height: screenHeight * 0.8,
-            decoration: BoxDecoration(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, borderRadius: BorderRadius.circular(8)),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Color(0xFFE0E0E0), borderRadius: BorderRadius.vertical(top: Radius.circular(8))),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text('$id - Official Report.pdf', overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontWeight: FontWeight.bold))),
-                      Row(
-                        children: [
-                          Icon(Icons.print, color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87),
-                          SizedBox(width: 16),
-                          Icon(Icons.download, color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87),
-                          SizedBox(width: 16),
-                          InkWell(onTap: () => Navigator.pop(context), child: Icon(Icons.close, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                        ],
-                      )
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Center(child: Text('DEPARTMENT OF LEGAL METROLOGY', textAlign: TextAlign.center, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 20, fontWeight: FontWeight.bold))),
-                        Center(child: Text('Official Inspection Report', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 16))),
-                        Divider(color: Colors.black26, height: 40),
-                        Text('Report ID: $id', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 14)),
-                        SizedBox(height: 8),
-                        Text('Target Product: $product', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 14)),
-                        SizedBox(height: 8),
-                        Text('Date: October 16, 2026', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 14)),
-                        SizedBox(height: 24),
-                        Text('FINDINGS:', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 8),
-                        Text(
-                          'Computer Vision analysis indicates a violation of the Legal Metrology (Packaged Commodities) Rules, 2011.\n\n'
-                          'Identified Infraction: $violationStr\n\n'
-                          'The mandatory declarations on the principal display panel do not meet the statutory requirements. '
-                          'Immediate remediation or issuance of an e-notice is recommended per the standard operating procedure.', 
-                          style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, height: 1.5)
-                        ),
-                        SizedBox(height: 40),
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          color: Colors.red.shade50,
-                          child: Text('STATUS: NON-COMPLIANT - E-NOTICE DISPATCHED', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                        )
-                      ],
-                    ),
-                  ),
-                )
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 class _AuditLogsScreen extends StatelessWidget {

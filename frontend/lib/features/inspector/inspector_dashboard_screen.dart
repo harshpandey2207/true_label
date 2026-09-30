@@ -8,6 +8,10 @@ import '../../core/theme_provider.dart';
 import '../admin/mock_data.dart';
 import '../../core/api_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
+import 'package:printing/printing.dart';
+import '../../core/report_generator.dart';
+import '../../core/report_viewer.dart';
 
 class InspectorDashboard extends StatelessWidget {
   final _controller = SidebarXController(selectedIndex: 0, extended: true);
@@ -210,7 +214,9 @@ class __ScannerScreenState extends State<_ScannerScreen> {
     });
   }
 
-  @override
+
+
+@override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
@@ -422,10 +428,24 @@ class __ScannerScreenState extends State<_ScannerScreen> {
                 ),
               ),
               SizedBox(height: 8),
-              ElevatedButton(
-                onPressed: _resetScanner,
-                style: ElevatedButton.styleFrom(backgroundColor: theme.cardColor),
-                child: Text('Clear & Start New Scan', style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: _resetScanner,
+                    style: ElevatedButton.styleFrom(backgroundColor: theme.cardColor),
+                    child: Text('Clear & Start New Scan', style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
+                  ),
+                  SizedBox(width: 16),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      ReportViewer.showPdfDialog(context: context, reportId: 'RPT-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}', product: _selectedCategory, violation: missingTags.isNotEmpty ? missingTags.join(', ') : 'None');
+                    },
+                    icon: Icon(Icons.picture_as_pdf, color: Colors.white),
+                    label: Text('Open Report PDF', style: TextStyle(color: Colors.white)),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                  ),
+                ],
               )
             ],
           ),
@@ -587,7 +607,13 @@ class _InspectorReportsScreen extends StatelessWidget {
                   leading: Icon(Icons.picture_as_pdf, color: Colors.orangeAccent),
                   title: Text('${violation['id']}.pdf', style: theme.textTheme.titleMedium),
                   subtitle: Text('${violation['status']}', style: theme.textTheme.bodySmall),
-                  trailing: Icon(Icons.download, color: theme.iconTheme.color),
+                  trailing: IconButton(
+                    icon: Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
+                    tooltip: 'View Report PDF',
+                    onPressed: () {
+                      ReportViewer.showPdfDialog(context: context, reportId: violation['id'], product: violation['product'], violation: violation['violation']);
+                    },
+                  ),
                 );
               },
             ),
