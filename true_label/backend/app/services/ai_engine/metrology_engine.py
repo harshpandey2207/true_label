@@ -14,16 +14,16 @@ from typing import Dict, Any
 from paddleocr import PaddleOCR
 
 # PP-OCRv4 mobile models — lightweight, fast on CPU.
-# det_limit_side_len=640: caps the detection grid so inference stays under 5s
-# on Render's 0.1 vCPU free tier. use_angle_cls=False saves another ~30%.
+# text_det_limit_side_len=640 caps the detection grid so inference stays under ~5s
+# on Render's 0.1 vCPU. Disabling doc orientation/unwarping saves another ~40%.
 ocr = PaddleOCR(
     ocr_version='PP-OCRv4',
     lang='en',
-    use_angle_cls=False,
-    use_gpu=False,
-    det_limit_side_len=640,
-    det_limit_type='max',
-    show_log=False,
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False,
+    text_det_limit_side_len=640,
+    text_det_limit_type='max',
 )
 
 OINTMENT_RULES = [
