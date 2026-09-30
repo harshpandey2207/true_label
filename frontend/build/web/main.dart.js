@@ -108103,19 +108103,20 @@ s=A.aLs(new A.w_(q,q,q,q),B.NL,s)
 return A.Q4(A.b([m,new A.fS(o,30,o),l,new A.fS(o,30,o),k,new A.fS(o,40,o),A.abh(o,A.aQA(A.fx("STATUS: "+p.r,A.kL(o,r,o,o,o,o,o,o,o,B.c3,o,o,16,o,B.ct,o,!0,1.5,o,o,o))),s,o,o,B.TF,1/0),new A.yC(1,B.Ug,new A.fS(0,0,o)),new A.QP(B.H6),new A.fS(o,5,o),A.aTK(A.b([A.fx("True Label Inspector App v2.4.0",B.Me),A.fx("Page 1 of 1",B.Me)],n),B.Gr)],n),B.jX)},
 $S:650}
 A.aq5.prototype={
-$1(a){var s,r,q,p,o,n,m,l=null,k=t.w,j=A.bf(a,l,k).w,i=A.V(a)
-k=A.bf(a,l,k).w
-s=i.ax.a===B.a8
-r=s?B.ok:B.B
-q=A.cM(8)
-p=s?B.E:B.od
-o=this.a
-n=A.X("Official Legal Metrology Report - "+o,l,l,l,A.a5(l,l,s?B.B:B.R,l,l,l,l,l,l,l,l,16,l,l,B.W,l,l,!0,l,l,l,l,l,l,l,l),l,l)
-m=t.p
-p=A.cw(l,A.dF(A.b([n,A.rN(!1,l,!0,A.bG(B.vL,s?B.B:B.E,l,l),l,!0,l,l,l,l,l,l,l,l,l,new A.aq3(a),l,l,l,l,l,l,l)],m),B.ad,B.dP,B.O,0),B.a5,l,l,new A.c3(p,l,l,B.NR,l,l,l,B.aD),l,l,l,l,B.TV,l,l,l)
-n=this.c
-s=n==="None"||n.length===0
-return A.aR4(l,B.a_,A.cw(l,A.b7(A.b([p,A.cF(new A.x0(A.aN8(s,this.b,o,"October 16, 2026",n),new A.aq4(o),l,t.jg),1)],m),B.ad,B.T,B.O,B.U),B.d4,l,l,new A.c3(r,l,l,q,l,l,l,B.aD),l,k.a.b*0.9,l,l,l,l,l,j.a.a*0.95),l,l,l,l,B.aKc,l,l,l)},
+$1(a){var s,r,q,p,o,n,m,l,k=null,j=t.w,i=A.bf(a,k,j).w.a.a,h=A.V(a),g=A.bf(a,k,j).w.a.b
+j=i>800?800:i*0.95
+s=g>900?900:g*0.9
+r=h.ax.a===B.a8
+q=r?B.ok:B.B
+p=A.cM(8)
+o=r?B.E:B.od
+n=this.a
+m=A.X("Official Legal Metrology Report - "+n,k,k,k,A.a5(k,k,r?B.B:B.R,k,k,k,k,k,k,k,k,16,k,k,B.W,k,k,!0,k,k,k,k,k,k,k,k),k,k)
+l=t.p
+o=A.cw(k,A.dF(A.b([m,A.rN(!1,k,!0,A.bG(B.vL,r?B.B:B.E,k,k),k,!0,k,k,k,k,k,k,k,k,k,new A.aq3(a),k,k,k,k,k,k,k)],l),B.ad,B.dP,B.O,0),B.a5,k,k,new A.c3(o,k,k,B.NR,k,k,k,B.aD),k,k,k,k,B.TV,k,k,k)
+m=this.c
+r=m==="None"||m.length===0
+return A.aR4(k,B.a_,A.cw(k,A.b7(A.b([o,A.cF(new A.x0(A.aN8(r,this.b,n,"October 16, 2026",m),new A.aq4(n),k,t.jg),1)],l),B.ad,B.T,B.O,B.U),B.d4,k,k,new A.c3(q,k,k,p,k,k,k,B.aD),k,s,k,k,k,k,k,j),k,k,k,k,B.aKc,k,k,k)},
 $S:651}
 A.aq3.prototype={
 $0(){A.f6(this.a,!1).jI(null)

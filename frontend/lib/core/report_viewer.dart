@@ -20,8 +20,8 @@ class ReportViewer {
         return Dialog(
           backgroundColor: Colors.transparent,
           child: Container(
-            width: screenWidth * 0.95,
-            height: screenHeight * 0.9,
+            width: screenWidth > 800 ? 800 : screenWidth * 0.95,
+            height: screenHeight > 900 ? 900 : screenHeight * 0.9,
             clipBehavior: Clip.antiAlias,
             decoration: BoxDecoration(
               color: theme.brightness == Brightness.dark ? const Color(0xFF1E1E1E) : Colors.white, 
