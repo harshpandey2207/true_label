@@ -69,32 +69,72 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         img_resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
         cv2.imwrite(image_path, img_resized)
 
-    # Run OCR inference: robust to both predict() (3.x) and ocr() (2.x) APIs
     parsed_lines = []
-    if hasattr(ocr, 'predict'):
-        try:
-            result = ocr.predict(image_path)
-            if result and len(result) > 0:
-                for res in result:
-                    boxes = res.get('dt_polys', [])
-                    texts = res.get('rec_texts', [])
-                    scores = res.get('rec_scores', [])
-                    for box, text, conf in zip(boxes, texts, scores):
-                        parsed_lines.append((box, str(text).strip(), float(conf)))
-        except Exception:
-            pass
 
-    if len(parsed_lines) == 0 and hasattr(ocr, 'ocr'):
-        try:
-            result = ocr.ocr(image_path, cls=False)
-            if result and result[0] is not None:
-                for line in result[0]:
-                    box = line[0]
-                    text = str(line[1][0]).strip()
-                    conf = float(line[1][1])
-                    parsed_lines.append((box, text, conf))
-        except Exception:
-            pass
+    # --- FAST DEMO BYPASS: OCR.space API ---
+    # Temporarily routes OCR to a fast cloud API to bypass Render's 0.1 CPU limit (which takes 87s).
+    # Returns bounding boxes in the exact format expected by the AR engine.
+    import requests
+    try:
+        with open(image_path, 'rb') as f:
+            img_bytes = f.read()
+        res = requests.post(
+            'https://api.ocr.space/parse/image',
+            files={'file': ('image.jpg', img_bytes)},
+            data={
+                'apikey': 'K89006093488957', # Free public key
+                'language': 'eng',
+                'isOverlayRequired': 'true',
+                'OCREngine': '2' # Engine 2 is optimized for numbers/product labels
+            },
+            timeout=10
+        )
+        data = res.json()
+        if data and not data.get('IsErroredOnProcessing'):
+            results = data.get('ParsedResults', [])
+            if results:
+                lines = results[0].get('TextOverlay', {}).get('Lines', [])
+                for line in lines:
+                    text = line.get('LineText', '').strip()
+                    words = line.get('Words', [])
+                    if words and text:
+                        # Construct 4-point bounding box
+                        left = min(w['Left'] for w in words)
+                        top = min(w['Top'] for w in words)
+                        right = max(w['Left'] + w['Width'] for w in words)
+                        bottom = max(w['Top'] + w['Height'] for w in words)
+                        box = [[left, top], [right, top], [right, bottom], [left, bottom]]
+                        parsed_lines.append((box, text, 0.99))
+    except Exception as e:
+        print(f"Bypass API Error: {e}")
+
+    # --- FALLBACK: OPEN-SOURCE PADDLEOCR ---
+    # If the fast API fails, it falls back to the original open-source architecture.
+    if len(parsed_lines) == 0:
+        if hasattr(ocr, 'predict'):
+            try:
+                result = ocr.predict(image_path)
+                if result and len(result) > 0:
+                    for res in result:
+                        boxes = res.get('dt_polys', [])
+                        texts = res.get('rec_texts', [])
+                        scores = res.get('rec_scores', [])
+                        for box, text, conf in zip(boxes, texts, scores):
+                            parsed_lines.append((box, str(text).strip(), float(conf)))
+            except Exception:
+                pass
+
+        if len(parsed_lines) == 0 and hasattr(ocr, 'ocr'):
+            try:
+                result = ocr.ocr(image_path, cls=False)
+                if result and result[0] is not None:
+                    for line in result[0]:
+                        box = line[0]
+                        text = str(line[1][0]).strip()
+                        conf = float(line[1][1])
+                        parsed_lines.append((box, text, conf))
+            except Exception:
+                pass
 
     misleading_patterns = [
         r"\bminimum\s+\d+(?:[.,]\d+)?",
@@ -185,7 +225,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
 
         # Normalize coordinates to 250x350 preview canvas
         scaled_box = [
-            [int((pt[0] / w_img) * 250), int((pt[1] / h_img) * 350)]
+            [int((pt[0] / (w_img * scale)) * 250), int((pt[1] / (h_img * scale)) * 350)]
             for pt in pts
         ]
 
