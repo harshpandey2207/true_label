@@ -413,88 +413,90 @@ class __ScannerScreenState extends State<_ScannerScreen> {
     
     if (missingTags.isNotEmpty) _overallCompliance = false;
 
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          color: _overallCompliance ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
-          width: double.infinity,
-          child: Column(
-            children: [
-              Text(
-                _overallCompliance ? 'FULLY COMPLIANT' : 'NON-COMPLIANT',
-                style: TextStyle(
-                  color: _overallCompliance ? Colors.green : Colors.red,
-                  fontSize: 18, fontWeight: FontWeight.bold
-                ),
-              ),
-              SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  ElevatedButton(
-                    onPressed: _resetScanner,
-                    style: ElevatedButton.styleFrom(backgroundColor: theme.cardColor),
-                    child: Text('Clear & Start New Scan', style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
-                  ),
-                  SizedBox(width: 16),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      List<Uint8List> proofBytes = [];
-                      for (var img in _capturedImages) {
-                        proofBytes.add(await img.readAsBytes());
-                      }
-                      if (context.mounted) {
-                        ReportViewer.showPdfDialog(
-                          context: context, 
-                          reportId: 'RPT-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}', 
-                          product: _selectedCategory, 
-                          violation: missingTags.isNotEmpty ? missingTags.join(', ') : 'None',
-                          proofImages: proofBytes,
-                        );
-                      }
-                    },
-                    icon: Icon(Icons.picture_as_pdf, color: Colors.white),
-                    label: Text('Open Report PDF', style: TextStyle(color: Colors.white)),
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-                  ),
-                ],
-              )
-            ],
-          ),
-        ),
-        
-        if (missingTags.isNotEmpty)
+    return SingleChildScrollView(
+      child: Column(
+        children: [
           Container(
-            padding: const EdgeInsets.all(16),
-            margin: const EdgeInsets.only(top: 16),
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(alpha: 0.1),
-              border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
-              borderRadius: BorderRadius.circular(8),
-            ),
+            padding: const EdgeInsets.all(12),
+            color: _overallCompliance ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
             width: double.infinity,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Missing Declarations:', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(
+                  _overallCompliance ? 'FULLY COMPLIANT' : 'NON-COMPLIANT',
+                  style: TextStyle(
+                    color: _overallCompliance ? Colors.green : Colors.red,
+                    fontSize: 18, fontWeight: FontWeight.bold
+                  ),
+                ),
                 SizedBox(height: 8),
-                Wrap(
-                  spacing: 8, runSpacing: 8,
-                  children: missingTags.map((t) => Chip(
-                    label: Text(t, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 12, fontWeight: FontWeight.bold)),
-                    backgroundColor: Colors.red.shade900,
-                    side: BorderSide.none,
-                  )).toList(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton(
+                      onPressed: _resetScanner,
+                      style: ElevatedButton.styleFrom(backgroundColor: theme.cardColor),
+                      child: Text('Clear & Start New Scan', style: TextStyle(color: theme.textTheme.bodyMedium?.color)),
+                    ),
+                    SizedBox(width: 16),
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        List<Uint8List> proofBytes = [];
+                        for (var img in _capturedImages) {
+                          proofBytes.add(await img.readAsBytes());
+                        }
+                        if (context.mounted) {
+                          ReportViewer.showPdfDialog(
+                            context: context, 
+                            reportId: 'RPT-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}', 
+                            product: _selectedCategory, 
+                            violation: missingTags.isNotEmpty ? missingTags.join(', ') : 'None',
+                            proofImages: proofBytes,
+                          );
+                        }
+                      },
+                      icon: Icon(Icons.picture_as_pdf, color: Colors.white),
+                      label: Text('Open Report PDF', style: TextStyle(color: Colors.white)),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                    ),
+                  ],
                 )
               ],
             ),
           ),
           
-        SizedBox(height: 16),
-        
-        Expanded(
-          child: ListView.builder(
+          if (missingTags.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(top: 16),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              width: double.infinity,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Missing Declarations:', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16)),
+                  SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8, runSpacing: 8,
+                    children: missingTags.map((t) => Chip(
+                      label: Text(t, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 12, fontWeight: FontWeight.bold)),
+                      backgroundColor: Colors.red.shade900,
+                      side: BorderSide.none,
+                    )).toList(),
+                  )
+                ],
+              ),
+            ),
+            
+          SizedBox(height: 16),
+          
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
             itemCount: _analysisResults?.length ?? 0,
             itemBuilder: (context, index) {
               final resultData = _analysisResults![index];
@@ -571,7 +573,6 @@ class __ScannerScreenState extends State<_ScannerScreen> {
               );
             },
           ),
-        ),
         
         if (!_overallCompliance)
           Padding(
@@ -592,8 +593,9 @@ class __ScannerScreenState extends State<_ScannerScreen> {
             ),
           ),
       ],
-    );
-  }
+    ),
+  );
+}
 }
 
 // --- 2. REPORTS SCREEN ---
