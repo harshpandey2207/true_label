@@ -2,7 +2,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.scan_routes import router as scan_router
 
+# Database imports
+from backend.app.db.database import SessionLocal, engine
+from backend.app.db.init_db import init_db
+
 app = FastAPI(title="True Label Legal Metrology API")
+
+@app.on_event("startup")
+def on_startup():
+    db = SessionLocal()
+    init_db(db)
+    db.close()
 
 app.add_middleware(
     CORSMiddleware,

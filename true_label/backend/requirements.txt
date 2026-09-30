@@ -48,3 +48,7 @@ setuptools==75.6.0
 
 scipy==1.11.4
 scikit-image==0.22.0
+
+# Database architecture
+SQLAlchemy==2.0.25
+psycopg2-binary==2.9.9
