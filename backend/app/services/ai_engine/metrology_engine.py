@@ -54,7 +54,7 @@ FIELD_MESSAGES = {
     "no_misleading_quantity": "Quantity declaration must not be misleading."
 }
 
-def analyze_product_label(image_path: str, product_type: str = "ointment", distance_mm: float = 300.0, focal_length_px: float = 800.0, db=None, category_id: int = 1) -> Dict[str, Any]:
+def analyze_product_label(image_path: str, product_type: str = "ointment", distance_mm: float = 300.0, focal_length_px: float = 800.0, db=None, category_id: int = 1, is_institutional: bool = False, rule_33_gst_active: bool = False, weight_under_10g: bool = False, is_medical_device: bool = False) -> Dict[str, Any]:
     img = cv2.imread(image_path)
     if img is None:
         return {"status": "ERROR", "declarations": [], "error": "Could not read image file."}
@@ -182,7 +182,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         
         if is_mrp_text or is_rs_number or is_price_value_near_mrp:
             tag = "mrp"
-            if height_mm < 1.0:
+            if height_mm < 1.0 and not is_medical_device:
                 is_compliant = False
                 failure_reason = f"MRP font height ({height_mm}mm) is below minimum required 1.0mm (Rule 7)."
 
@@ -190,7 +190,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         elif any(k in text_lower for k in ["net wt", "net weight", "net qty", "net quantity", " 30g", "30 g", "30g", "wt.", "weight"]) or \
              (bool(re.search(r'\b\d+\s*(?:g|gm|gms|ml|l|kg|mg)\b', text_lower)) and not any(k in text_lower for k in ["usp", "ip", "w/w", "%", "iodine"])):
             tag = "net_quantity"
-            if height_mm < 1.0:
+            if height_mm < 1.0 and not is_medical_device:
                 is_compliant = False
                 failure_reason = f"Net Quantity font height ({height_mm}mm) is below minimum required 1.0mm (Rule 7)."
 
@@ -260,10 +260,34 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     # Check missing mandatory tags against the Database
     missing_tags = []
     if db is not None:
-        from backend.app.db.models import ComplianceRule
+        from backend.app.db.models import ComplianceRule, ExemptionClause
         mandatory_rules = db.query(ComplianceRule).filter(ComplianceRule.category_id == category_id, ComplianceRule.is_mandatory == True).all()
         mandatory_tags = {r.tag for r in mandatory_rules}
         found_tags = {d["tag"].upper() for d in declarations}
+        
+        # --- APPLY RULE 32: WEIGHT UNDER 10G EXEMPTION (Except Tobacco) ---
+        is_tobacco = any("tobacco" in p[1].lower() or "pan masala" in p[1].lower() for p in parsed_lines)
+        if weight_under_10g and not is_tobacco:
+            # Exempt from all declarations except standard generic names
+            mandatory_tags = set()
+            
+        # --- APPLY INSTITUTIONAL EXEMPTION (Rule 2(bb) & 2(bc)) ---
+        if is_institutional:
+            # Exempt from MRP, Unit Sale Price
+            if "MRP" in mandatory_tags: mandatory_tags.remove("MRP")
+            if "UNIT_SALE_PRICE" in mandatory_tags: mandatory_tags.remove("UNIT_SALE_PRICE")
+            
+            # Must have 'Not for retail sale'
+            has_not_for_retail = any("not for retail" in p[1].lower() for p in parsed_lines)
+            if not has_not_for_retail:
+                mandatory_tags.add("NOT_FOR_RETAIL_SALE_DECLARATION")
+
+        # --- APPLY LANGUAGE RULE 4 CHECK ---
+        # If no english/hindi is detected, language check fails
+        has_valid_language = any(re.search(r'[a-zA-Z\u0900-\u097F]', p[1]) for p in parsed_lines)
+        if has_valid_language:
+            found_tags.add("LANGUAGE_CHECK")
+
         missing_tags = list(mandatory_tags - found_tags)
     
     status = "NON_COMPLIANT" if (len(declarations) == 0 or len(missing_tags) > 0 or any(not d["is_compliant"] for d in declarations)) else "COMPLIANT"

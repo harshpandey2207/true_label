@@ -17,6 +17,10 @@ def analyze_ar_scan(
     distance_mm: float = Form(300.0),      
     focal_length_px: float = Form(1050.0),
     category_id: int = Form(1),
+    is_institutional: bool = Form(False),
+    rule_33_gst_active: bool = Form(False),
+    weight_under_10g: bool = Form(False),
+    is_medical_device: bool = Form(False),
     db: Session = Depends(get_db)
 ):
     results = []
@@ -38,7 +42,11 @@ def analyze_ar_scan(
                     distance_mm=distance_mm, 
                     focal_length_px=focal_length_px,
                     db=db,
-                    category_id=category_id
+                    category_id=category_id,
+                    is_institutional=is_institutional,
+                    rule_33_gst_active=rule_33_gst_active,
+                    weight_under_10g=weight_under_10g,
+                    is_medical_device=is_medical_device
                 )
             except Exception as e:
                 analysis = {
