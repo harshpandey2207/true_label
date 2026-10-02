@@ -556,11 +556,32 @@ class __ScannerScreenState extends State<_ScannerScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('${d['tag']}', style: TextStyle(color: passed ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
-                              SizedBox(height: 4),
-                              Text('Detected: "${d['text']}"', style: theme.textTheme.bodyMedium),
-                              Text('Height: ${d['height_mm']}mm - ${passed ? 'Pass' : 'Fail'}', style: theme.textTheme.bodySmall),
-                            ],
+                              Text('As per rules applicable on this product:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                              SizedBox(height: 12),
+                              
+                              // 1. Show Detected Mandatory Rules
+                              if (analysis['declarations'] != null)
+                                ...((analysis['declarations'] as List).where((d) => d['tag'] != 'GENERAL').map((d) {
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(d['is_compliant'] ? Icons.check_circle_outline : Icons.error_outline, 
+                                        color: d['is_compliant'] ? Colors.green : Colors.red),
+                                    title: Text(d['tag'], style: TextStyle(color: d['is_compliant'] ? Colors.greenAccent : Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                                    subtitle: Text("\n", style: TextStyle(color: textMuted, fontSize: 12)),
+                                  );
+                                }).toList()),
+                                
+                              // 2. Show Missing Mandatory Rules
+                              if (analysis['missing_tags'] != null && analysis['missing_tags'].isNotEmpty)
+                                ...((analysis['missing_tags'] as List).map((t) {
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(Icons.cancel, color: Colors.red),
+                                    title: Text(t.toString(), style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                                    subtitle: Text("Missing mandatory declaration. Zero compliance.", style: TextStyle(color: textMuted, fontSize: 12)),
+                                  );
+                                }).toList()),
+],
                           ),
                         );
                       }),

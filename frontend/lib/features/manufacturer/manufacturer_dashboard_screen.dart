@@ -494,29 +494,32 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (analysis['missing_tags'] != null && analysis['missing_tags'].isNotEmpty) ...[
-                              Text('Missing Mandatory Tags:', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                              SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8, runSpacing: 8,
-                                children: (analysis['missing_tags'] as List).map((t) => Chip(
-                                  label: Text(t.toString(), style: TextStyle(color: Colors.white, fontSize: 12)),
-                                  backgroundColor: Colors.redAccent,
-                                )).toList(),
-                              ),
-                              SizedBox(height: 16),
-                            ],
-                            Text('Detected Declarations:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-                            SizedBox(height: 8),
-                            if (analysis['declarations'] != null)
-                              for (var d in analysis['declarations'])
-                                ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: Icon(d['is_compliant'] ? Icons.check_circle_outline : Icons.error_outline, 
-                                      color: d['is_compliant'] ? Colors.green : Colors.red),
-                                  title: Text(d['tag'], style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.bold)),
-                                  subtitle: Text("${d['text']}\n${d['message']}", style: TextStyle(color: textMuted, fontSize: 12)),
-                                )
+                            Text('As per rules applicable on this product:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                              SizedBox(height: 12),
+                              
+                              // 1. Show Detected Mandatory Rules
+                              if (analysis['declarations'] != null)
+                                ...((analysis['declarations'] as List).where((d) => d['tag'] != 'GENERAL').map((d) {
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(d['is_compliant'] ? Icons.check_circle_outline : Icons.error_outline, 
+                                        color: d['is_compliant'] ? Colors.green : Colors.red),
+                                    title: Text(d['tag'], style: TextStyle(color: d['is_compliant'] ? Colors.greenAccent : Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                                    subtitle: Text("\
+", style: TextStyle(color: textMuted, fontSize: 12)),
+                                  );
+                                }).toList()),
+                                
+                              // 2. Show Missing Mandatory Rules
+                              if (analysis['missing_tags'] != null && analysis['missing_tags'].isNotEmpty)
+                                ...((analysis['missing_tags'] as List).map((t) {
+                                  return ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: Icon(Icons.cancel, color: Colors.red),
+                                    title: Text(t.toString(), style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                                    subtitle: Text("Missing mandatory declaration. Zero compliance.", style: TextStyle(color: textMuted, fontSize: 12)),
+                                  );
+                                }).toList()),
                           ],
                         ),
                       )
