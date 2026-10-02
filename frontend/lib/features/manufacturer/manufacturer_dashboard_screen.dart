@@ -5,8 +5,10 @@ import 'package:sidebarx/sidebarx.dart';
 import '../admin/mock_data.dart';
 import 'dart:ui' as ui;
 import 'package:flutter/rendering.dart';
-import 'package:flutter/foundation.dart'; // for Uint8List // REQUIRED IMPORT
+import 'package:flutter/foundation.dart';
 import '../../core/report_viewer.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../core/api_service.dart';
 
 class ManufacturerDashboard extends StatefulWidget {
   const ManufacturerDashboard({super.key});
@@ -90,26 +92,38 @@ class _ManufacturerDashboardState extends State<ManufacturerDashboard> {
   }
 }
 
-class _ManufacturerScreensRouter extends StatelessWidget {
+class _ManufacturerScreensRouter extends StatefulWidget {
   const _ManufacturerScreensRouter({super.key, required this.controller});
   final SidebarXController controller;
 
   @override
+  State<_ManufacturerScreensRouter> createState() => _ManufacturerScreensRouterState();
+}
+
+class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> {
+  String _missingTagsForGenerator = "";
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
     return AnimatedBuilder(
-      animation: controller,
+      animation: widget.controller,
       builder: (context, child) {
-        switch (controller.selectedIndex) {
-          case 0: return const _BusinessOwnerScannerScreen();
+        switch (widget.controller.selectedIndex) {
+          case 0: return _BusinessOwnerScannerScreen(
+            onNavigateToGenerator: (missingTags) {
+              setState(() {
+                _missingTagsForGenerator = missingTags;
+              });
+              widget.controller.selectIndex(6); // Switch to AI Label Generator
+            },
+          );
           case 1: return _ManufacturerOverviewScreen();
           case 2: return _EnterpriseRegistryScreen();
           case 3: return _BusinessOwnerRepositoryScreen();
           case 4: return _StatutoryFinesScreen();
           case 5: return _LegalNoticesScreen();
-          case 6: return const _AILabelGeneratorScreen();
+          case 6: return _AILabelGeneratorScreen(initialMissingTags: _missingTagsForGenerator);
           case 7: return _ProfileScreen();
           case 8: return const _LogoutScreen();
           default: return Center(child: Text('Screen not found', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)));
@@ -121,114 +135,399 @@ class _ManufacturerScreensRouter extends StatelessWidget {
 
 // --- 1. PRE-MARKET SCANNER WITH CATEGORY SELECTOR ---
 class _BusinessOwnerScannerScreen extends StatefulWidget {
-  const _BusinessOwnerScannerScreen({super.key});
+  final Function(String missingTags)? onNavigateToGenerator;
+  const _BusinessOwnerScannerScreen({super.key, this.onNavigateToGenerator});
 
   @override
   __BusinessOwnerScannerScreenState createState() => __BusinessOwnerScannerScreenState();
 }
 
 class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScreen> {
-  bool _isScanning = false;
-  String _selectedCategory = 'Packaged Drinking Water (Pre-packaged Commodities)';
+  int _scanState = 0; 
+  String _processingText = "Initializing AI Vision...";
+  String _selectedCategory = 'General Packaged Commodity';
+  
+  final List<XFile> _capturedImages = []; 
+  List<dynamic>? _analysisResults; 
+  bool _overallCompliance = false;
+  final ImagePicker _picker = ImagePicker();
 
   final List<String> _productCategories = [
-    'Packaged Drinking Water (Pre-packaged Commodities)',
-    'Electronics & Household Appliances',
-    'Cosmetics & Pharma Goods',
-    'Textiles & Apparel Measure',
-    'Agricultural Commodities & Seeds'
+    'General Packaged Commodity',
+    'Food & Beverages',
+    'Electronics & Appliances',
+    'Cosmetics, Ointments & Pharma Goods',
+    'Apparel & Textiles',
   ];
+
+  Future<void> _pickCameraImage() async {
+    final XFile? photo = await _picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 70, 
+      maxWidth: 1200,   
+      maxHeight: 1200,
+    );
+    if (photo == null) return;
+    setState(() {
+      _capturedImages.add(photo);
+    });
+  }
+
+  Future<void> _pickMultipleGalleryImages() async {
+    final List<XFile> photos = await _picker.pickMultiImage(
+      imageQuality: 70,
+      maxWidth: 1200,
+      maxHeight: 1200,
+    );
+    if (photos.isNotEmpty) {
+      setState(() {
+        _capturedImages.addAll(photos);
+      });
+    }
+  }
+
+  Future<void> _runScan() async {
+    if (_capturedImages.isEmpty) return;
+    
+    setState(() {
+      _scanState = 1;
+      _processingText = "Analyzing ${_capturedImages.length} images...";
+    });
+
+    try {
+      final result = await ApiService.analyzeArScan(
+        imageFiles: _capturedImages,
+        distanceMm: 300.0,
+        focalLengthPx: 800.0,
+        categoryId: _productCategories.indexOf(_selectedCategory) + 1,
+      );
+
+      if (result != null && result['status'] == 'SUCCESS') {
+        setState(() {
+          _analysisResults = result['results'];
+          _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'COMPLIANT');
+          _scanState = 2;
+        });
+      } else {
+        final errorMsg = result?['error'] ?? "Failed to get analysis from backend.";
+        _showError(errorMsg);
+      }
+    } catch (e) {
+      _showError("Connection error: $e");
+    }
+  }
+
+  void _showError(String msg) {
+    setState(() => _scanState = 0);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: Colors.redAccent),
+    );
+  }
+
+  void _resetScanner() {
+    setState(() {
+      _scanState = 0;
+      _analysisResults = null;
+      _capturedImages.clear();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
     final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
+    
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Pre-Market AI Compliance Scanner', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Pre-Market Compliance Scanner', style: TextStyle(color: textColor, fontSize: 28, fontWeight: FontWeight.bold)),
+            if (_scanState != 0)
+              IconButton(
+                icon: Icon(Icons.refresh, color: textMuted),
+                onPressed: _resetScanner,
+                tooltip: "New Scan",
+              )
+          ],
+        ),
         SizedBox(height: 16),
         
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          decoration: BoxDecoration(
-            color: theme.cardColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              isExpanded: true,
-              value: _selectedCategory,
-              dropdownColor: theme.cardColor,
-              style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 14),
-              icon: Icon(Icons.arrow_drop_down, color: Colors.greenAccent),
-              items: _productCategories.map((String category) {
-                return DropdownMenuItem<String>(
-                  value: category,
-                  child: Text(category, overflow: TextOverflow.ellipsis),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedCategory = newValue!;
-                });
-              },
-            ),
-          ),
-        ),
-        SizedBox(height: 20),
+        if (_scanState == 0) _buildConfigurationState(theme, textColor, textMuted),
+        if (_scanState == 1) _buildProcessingState(theme, textColor),
+        if (_scanState == 2) _buildResultState(theme, textColor, textMuted),
+      ],
+    );
+  }
 
-        Expanded(
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: double.infinity,
-                  height: 280,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: _isScanning ? Colors.greenAccent : Colors.white24, width: 2),
-                    borderRadius: BorderRadius.circular(16),
-                    color: theme.cardColor,
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
+  Widget _buildConfigurationState(ThemeData theme, Color textColor, Color textMuted) {
+    return Expanded(
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: textMuted),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  value: _selectedCategory,
+                  dropdownColor: theme.cardColor,
+                  style: TextStyle(color: textColor, fontSize: 14),
+                  icon: Icon(Icons.arrow_drop_down, color: Colors.greenAccent),
+                  items: _productCategories.map((String category) {
+                    return DropdownMenuItem<String>(value: category, child: Text(category, overflow: TextOverflow.ellipsis));
+                  }).toList(),
+                  onChanged: (String? newValue) => setState(() => _selectedCategory = newValue!),
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: theme.cardColor,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3), width: 2),
+              ),
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                children: [
+                  Icon(Icons.camera_alt_outlined, size: 64, color: Colors.greenAccent),
+                  SizedBox(height: 16),
+                  Text('Capture all sides of the product packaging', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 8),
+                  Text('Ensure high-resolution images of the Principal Display Panel (PDP) and back labels for OCR Rule 7 geometry analysis.', 
+                    textAlign: TextAlign.center, style: TextStyle(color: textMuted, fontSize: 14)),
+                  SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.document_scanner_outlined, size: 100, color: Colors.white12),
-                      if (_isScanning) CircularProgressIndicator(color: Colors.greenAccent),
-                      if (!_isScanning) Icon(Icons.crop_free, size: 150, color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[200],
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        ),
+                        onPressed: _pickCameraImage,
+                        icon: Icon(Icons.camera, color: textColor),
+                        label: Text('Camera', style: TextStyle(color: textColor)),
+                      ),
+                      SizedBox(width: 16),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: theme.brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[200],
+                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        ),
+                        onPressed: _pickMultipleGalleryImages,
+                        icon: Icon(Icons.photo_library, color: textColor),
+                        label: Text('Gallery', style: TextStyle(color: textColor)),
+                      ),
                     ],
                   ),
-                ),
-                SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity,
-                  height: 60,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
-                    onPressed: () {
-                      setState(() => _isScanning = true);
-                      Future.delayed(const Duration(seconds: 2), () {
-                        if (mounted) {
-                          setState(() => _isScanning = false);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Scan complete. Report saved to Audit Repository.'), backgroundColor: Colors.green),
-                          );
-                        }
-                      });
-                    },
-                    icon: Icon(Icons.camera, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, size: 28),
-                    label: Text('RUN PRE-MARKET SCAN', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
-                  ),
-                )
-              ],
+                ],
+              ),
             ),
-          ),
-        )
-      ],
+            SizedBox(height: 24),
+            if (_capturedImages.isNotEmpty) ...[
+              Text('Captured Images (${_capturedImages.length})', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
+              SizedBox(height: 12),
+              SizedBox(
+                height: 100,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _capturedImages.length,
+                  itemBuilder: (context, index) {
+                    return Container(
+                      margin: EdgeInsets.only(right: 12),
+                      width: 100,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.greenAccent),
+                        image: DecorationImage(
+                          image: NetworkImage(_capturedImages[index].path),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
+                  onPressed: _runScan,
+                  icon: Icon(Icons.document_scanner, color: Colors.black),
+                  label: Text('RUN COMPLIANCE SCAN', style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+              )
+            ]
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProcessingState(ThemeData theme, Color textColor) {
+    return Expanded(
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 80, height: 80,
+              child: CircularProgressIndicator(color: Colors.greenAccent, strokeWidth: 6),
+            ),
+            SizedBox(height: 32),
+            Text(_processingText, style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold)),
+            SizedBox(height: 16),
+            Text("Extracting spatial OCR geometries...", style: TextStyle(color: Colors.greenAccent, fontSize: 14)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultState(ThemeData theme, Color textColor, Color textMuted) {
+    if (_analysisResults == null || _analysisResults!.isEmpty) {
+      return Center(child: Text("No results returned.", style: TextStyle(color: textColor)));
+    }
+
+    final allMissingTags = <String>{};
+    for (var r in _analysisResults!) {
+      if (r['analysis']['missing_tags'] != null) {
+        allMissingTags.addAll(List<String>.from(r['analysis']['missing_tags']));
+      }
+    }
+    final missingTagsString = allMissingTags.join(", ");
+
+    return Expanded(
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _overallCompliance ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _overallCompliance ? Colors.green : Colors.redAccent, width: 2),
+              ),
+              child: Column(
+                children: [
+                  Icon(
+                    _overallCompliance ? Icons.check_circle : Icons.warning_amber_rounded,
+                    color: _overallCompliance ? Colors.green : Colors.redAccent,
+                    size: 64,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    _overallCompliance ? 'Product is Fully Compliant!' : 'Product is Non-Compliant',
+                    style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    _overallCompliance 
+                        ? 'All mandatory declarations under the Legal Metrology Act, 2011 were detected.'
+                        : 'Missing mandatory declarations or formatting errors detected. See report below.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: textMuted, fontSize: 14),
+                  ),
+                  if (!_overallCompliance) ...[
+                    SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                        onPressed: () {
+                          if (widget.onNavigateToGenerator != null) {
+                            widget.onNavigateToGenerator!(missingTagsString);
+                          }
+                        },
+                        icon: Icon(Icons.auto_awesome, color: Colors.white),
+                        label: Text('REMEDIATE WITH AI LABEL GENERATOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  ]
+                ],
+              ),
+            ),
+            SizedBox(height: 24),
+            Text('Detailed Image Reports', style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold)),
+            SizedBox(height: 16),
+            
+            ListView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: _analysisResults!.length,
+              itemBuilder: (context, index) {
+                final result = _analysisResults![index];
+                final analysis = result['analysis'];
+                final bool isCompliant = analysis['status'] == 'COMPLIANT';
+                
+                return Card(
+                  color: theme.cardColor,
+                  margin: EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: isCompliant ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.5)),
+                  ),
+                  child: ExpansionTile(
+                    title: Text('Image ${index + 1}: ${isCompliant ? "Passed" : "Failed"}', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                    subtitle: Text('${analysis['declarations']?.length ?? 0} declarations found', style: TextStyle(color: textMuted)),
+                    leading: Icon(isCompliant ? Icons.check_circle : Icons.cancel, color: isCompliant ? Colors.green : Colors.red),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (analysis['missing_tags'] != null && analysis['missing_tags'].isNotEmpty) ...[
+                              Text('Missing Mandatory Tags:', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                              SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8, runSpacing: 8,
+                                children: (analysis['missing_tags'] as List).map((t) => Chip(
+                                  label: Text(t.toString(), style: TextStyle(color: Colors.white, fontSize: 12)),
+                                  backgroundColor: Colors.redAccent,
+                                )).toList(),
+                              ),
+                              SizedBox(height: 16),
+                            ],
+                            Text('Detected Declarations:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                            SizedBox(height: 8),
+                            if (analysis['declarations'] != null)
+                              for (var d in analysis['declarations'])
+                                ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(d['is_compliant'] ? Icons.check_circle_outline : Icons.error_outline, 
+                                      color: d['is_compliant'] ? Colors.green : Colors.red),
+                                  title: Text(d['tag'], style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.bold)),
+                                  subtitle: Text("${d['text']}\n${d['message']}", style: TextStyle(color: textMuted, fontSize: 12)),
+                                )
+                          ],
+                        ),
+                      )
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -512,7 +811,8 @@ class _LegalNoticesScreen extends StatelessWidget {
 
 // --- 7. AI LABEL STUDIO (DYNAMIC GENERATION) ---
 class _AILabelGeneratorScreen extends StatefulWidget {
-  const _AILabelGeneratorScreen({super.key});
+  final String? initialMissingTags;
+  const _AILabelGeneratorScreen({super.key, this.initialMissingTags});
 
   @override
   __AILabelGeneratorScreenState createState() => __AILabelGeneratorScreenState();
@@ -527,9 +827,19 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
 
   final _shapeController = TextEditingController(text: 'Cylindrical Bottle Wrap');
   final _dimensionController = TextEditingController(text: '12cm x 6cm');
-  final _promptController = TextEditingController(text: 'Make it look organic and premium. Use dark green accents, preserve the original leaf logo, and ensure FSSAI table is prominent.');
+  late TextEditingController _promptController;
 
   String _rule7RequiredHeight = '4.0mm';
+
+  @override
+  void initState() {
+    super.initState();
+    String defaultPrompt = 'Make it look organic and premium. Use dark green accents, preserve the original leaf logo, and ensure FSSAI table is prominent.';
+    if (widget.initialMissingTags != null && widget.initialMissingTags!.isNotEmpty) {
+      defaultPrompt += '\n\nIMPORTANT COMPLIANCE FIX: Please automatically inject the following missing mandatory declarations: ${widget.initialMissingTags}';
+    }
+    _promptController = TextEditingController(text: defaultPrompt);
+  }
 
   @override
   void dispose() {
