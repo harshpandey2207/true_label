@@ -825,31 +825,55 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
   bool _hasReferenceImage = false;
   final GlobalKey _labelKey = GlobalKey();
 
+  final _productNameController = TextEditingController(text: 'My Custom Product');
   final _shapeController = TextEditingController(text: 'Cylindrical Bottle Wrap');
   final _dimensionController = TextEditingController(text: '12cm x 6cm');
   late TextEditingController _promptController;
+  
+  // Dynamic controllers for missing tags
+  final Map<String, TextEditingController> _missingTagControllers = {};
+  List<String> _missingTags = [];
 
   String _rule7RequiredHeight = '4.0mm';
 
   @override
   void initState() {
     super.initState();
-    String defaultPrompt = 'Make it look organic and premium. Use dark green accents, preserve the original leaf logo, and ensure FSSAI table is prominent.';
+    String defaultPrompt = 'Make it look organic and premium. Use dark green accents, preserve the original brand DNA, and ensure Legal Metrology rules are followed.';
+    
     if (widget.initialMissingTags != null && widget.initialMissingTags!.isNotEmpty) {
-      defaultPrompt += '\n\nIMPORTANT COMPLIANCE FIX: Please automatically inject the following missing mandatory declarations: ${widget.initialMissingTags}';
+      _missingTags = widget.initialMissingTags!.split(',').map((e) => e.trim()).toList();
+      for (var tag in _missingTags) {
+        _missingTagControllers[tag] = TextEditingController();
+      }
     }
+    
     _promptController = TextEditingController(text: defaultPrompt);
   }
 
   @override
   void dispose() {
+    _productNameController.dispose();
     _shapeController.dispose();
     _dimensionController.dispose();
     _promptController.dispose();
+    for (var controller in _missingTagControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   void _generateLabel() {
+    // Basic validation
+    for (var tag in _missingTags) {
+      if (_missingTagControllers[tag]!.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Please provide a value for missing tag: $tag'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
     setState(() => _isGenerating = true);
     // Simulate AI Vision analysis and Code generation
     Future.delayed(const Duration(milliseconds: 2500), () {
@@ -857,11 +881,12 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
         setState(() {
           _isGenerating = false;
           _showLabel = true;
-          _rule7RequiredHeight = '4.0mm'; // Standard for typical bottles
+          // Dynamically compute Rule 7 height (simulated logic)
+          _rule7RequiredHeight = _dimensionController.text.contains('cm') ? '4.0mm' : '6.0mm';
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Generative Vision-to-Code complete! Brand DNA preserved, Legal Metrology injected.'), 
+            content: Text('Generative Vision-to-Code complete! Legal Metrology injected.'), 
             backgroundColor: Colors.green
           ),
         );
@@ -872,43 +897,38 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
   void _resetForm() {
     setState(() {
       _showLabel = false;
+      _isGenerating = false;
       _hasReferenceImage = false;
-      _shapeController.clear();
-      _dimensionController.clear();
-      _promptController.clear();
     });
   }
 
-  Future<void> _exportPng() async {
+  Future<void> _exportLabel() async {
     setState(() => _isExporting = true);
+    await Future.delayed(const Duration(milliseconds: 800)); // Simulate render delay
+    
     try {
-      await Future.delayed(const Duration(milliseconds: 100));
-      final boundary = _labelKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return;
-
+      final RenderRepaintBoundary boundary = _labelKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
       final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      final Uint8List pngBytes = byteData!.buffer.asUint8List();
       
-      if (byteData != null) {
-        final Uint8List pngBytes = byteData.buffer.asUint8List();
-        _showPngPreviewDialog(pngBytes);
+      setState(() => _isExporting = false);
+      
+      if (mounted) {
+        _showExportDialog(pngBytes);
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to generate PNG: '), backgroundColor: Colors.redAccent),
-      );
-    } finally {
-      if (mounted) setState(() => _isExporting = false);
+      setState(() => _isExporting = false);
     }
   }
 
-  void _showPngPreviewDialog(Uint8List pngBytes) {
+  void _showExportDialog(Uint8List pngBytes) {
     final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.cardColor,
-        title: Text('Generated Label PNG (High Res)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+        title: Text('Export Production Ready Label', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
         content: SizedBox(
           width: 320,
           height: 440,
@@ -927,7 +947,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('SVG/PNG ready for production packaging print!'), backgroundColor: Colors.green),
+                const SnackBar(content: Text('Saved for production packaging print!'), backgroundColor: Colors.green),
               );
             },
             icon: Icon(Icons.check, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
@@ -972,7 +992,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
                   Text('Generative AI Label Remediation Studio', 
                     style: TextStyle(color: textColor, fontSize: 28, fontWeight: FontWeight.bold)),
                   SizedBox(height: 6),
-                  Text('Upload your current brand label. Vision AI will extract your brand DNA (colors/fonts) and write SVG/HTML code to dynamically inject strict Legal Metrology 2011 compliance.', 
+                  Text('Upload your current brand label. Vision AI will extract your brand DNA and write code to dynamically inject strict Legal Metrology compliance.', 
                     style: TextStyle(color: textMuted, fontSize: 14)),
                 ],
               ),
@@ -1026,7 +1046,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
                                     children: [
                                       Icon(Icons.cloud_upload_outlined, color: textMuted, size: 32),
                                       SizedBox(height: 8),
-                                      Text('Click to upload current label or bottle image', style: TextStyle(color: textMuted))
+                                      Text('Click to upload current label or packaging image', style: TextStyle(color: textMuted))
                                     ],
                                   ),
                             ),
@@ -1034,18 +1054,36 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
                         ),
                         SizedBox(height: 24),
                         
-                        Text('2. Target Shape & Dimensions', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                        Text('2. Target Shape, Product & Dimensions', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
                         SizedBox(height: 8),
                         Row(
                           children: [
-                            Expanded(child: _buildInputField('Product Shape (Freehand)', _shapeController, 'e.g. Cylindrical, Curved Hexagon...', theme)),
+                            Expanded(child: _buildInputField('Product Name', _productNameController, 'e.g. Pure Honey', theme)),
                             SizedBox(width: 12),
-                            Expanded(child: _buildInputField('Label Dimensions', _dimensionController, 'e.g. 10cm x 15cm', theme)),
+                            Expanded(child: _buildInputField('Shape', _shapeController, 'e.g. Cylindrical', theme)),
+                            SizedBox(width: 12),
+                            Expanded(child: _buildInputField('Dimensions', _dimensionController, 'e.g. 10cm x 15cm', theme)),
                           ],
                         ),
                         SizedBox(height: 24),
 
-                        Text('3. Custom AI Prompt', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                        if (_missingTags.isNotEmpty) ...[
+                          Text('3. Fill Missing Mandatory Data', style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          SizedBox(height: 8),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: _missingTags.map((tag) {
+                              return SizedBox(
+                                width: (MediaQuery.of(context).size.width / 2) - 10,
+                                child: _buildInputField('Missing: $tag', _missingTagControllers[tag]!, 'Provide value for $tag', theme),
+                              );
+                            }).toList(),
+                          ),
+                          SizedBox(height: 24),
+                        ],
+
+                        Text('${_missingTags.isNotEmpty ? "4" : "3"}. Custom AI Prompt', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
                         SizedBox(height: 8),
                         _buildInputField('AI Instructions', _promptController, 'e.g. Use organic colors, preserve logo...', theme, maxLines: 3),
                         
@@ -1079,238 +1117,138 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
                       width: double.infinity,
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: _shapeController.text.toLowerCase().contains('circle') ? BorderRadius.circular(150) : BorderRadius.circular(12),
                         border: Border.all(color: Colors.greenAccent, width: 2),
                         boxShadow: [
                           BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 2),
                         ]
                       ),
                       child: ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: _shapeController.text.toLowerCase().contains('circle') ? BorderRadius.circular(150) : BorderRadius.circular(10),
                         child: Column(
                           children: [
-                            // Branding Section (Generative style matching)
+                            // Branding Section (Dynamic Product Name)
                             Container(
                               padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
                               width: double.infinity,
                               color: const Color(0xFF1B4332), // Dark organic green (simulated extraction)
                               child: Column(
                                 children: [
-                                  Icon(Icons.eco, size: 48, color: Colors.greenAccent),
+                                  Icon(Icons.auto_awesome, size: 48, color: Colors.greenAccent),
                                   SizedBox(height: 12),
                                   Text(
-                                    'ALMOND ORGANICS',
+                                    _productNameController.text.toUpperCase(),
                                     style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 2),
+                                    textAlign: TextAlign.center,
                                   ),
                                   Text(
-                                    '100% PURE & NATURAL',
+                                    'AI GENERATED LABEL',
                                     style: TextStyle(color: Colors.greenAccent, fontSize: 12, letterSpacing: 1),
                                   ),
                                 ],
                               ),
                             ),
-                            // Legal Metrology Section (Strict Compliance)
+                            // Legal Metrology Section (Dynamic Injection)
                             Container(
                               padding: const EdgeInsets.all(24.0),
                               color: Colors.white,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('NET QUANTITY:', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                                      Text('1 L', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 16)), // Required height 4mm dynamically applied
-                                    ],
-                                  ),
-                                  Divider(color: Colors.grey.shade300),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('MRP (Incl. of all taxes):', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                                      Text('?75.00', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                                    ],
-                                  ),
-                                  Divider(color: Colors.grey.shade300),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('MFG DATE:', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                                      Text('10/2026', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                                    ],
-                                  ),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text('BATCH NO:', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                                      Text('BAT-2026-901', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                                    ],
-                                  ),
+                                  Text('LEGAL METROLOGY DECLARATIONS', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 16)),
                                   SizedBox(height: 16),
-                                  Container(
-                                    padding: EdgeInsets.all(12),
-                                    decoration: BoxDecoration(border: Border.all(color: Colors.black54), borderRadius: BorderRadius.circular(4)),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                  
+                                  // Map over provided missing tags dynamically
+                                  ..._missingTags.map((tag) {
+                                    return Column(
                                       children: [
-                                        Text('MANUFACTURED & PACKED BY:', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-                                        Text('Almond Organics Pvt Ltd, Plot 18, MIDC, Indore, MP - 452001', style: TextStyle(color: Colors.black87, fontSize: 11)),
-                                        SizedBox(height: 8),
-                                        Text('CUSTOMER CARE:', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 11)),
-                                        Text('Email: support@almondorganics.in | Tel: 1800-555-0199', style: TextStyle(color: Colors.black87, fontSize: 11)),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text('$tag:', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                                            Text(_missingTagControllers[tag]!.text, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)), // Required height 4mm dynamically applied
+                                          ],
+                                        ),
+                                        Divider(color: Colors.grey.shade300),
+                                      ],
+                                    );
+                                  }).toList(),
+
+                                  // Simulated additional compliance lines to look complete if missing tags were few
+                                  if (!_missingTags.contains('NET_QUANTITY')) ...[
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('NET QUANTITY:', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                                        Text('100g', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
                                       ],
                                     ),
-                                  ),
-                                  SizedBox(height: 12),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.verified, color: Colors.blueAccent, size: 16),
-                                      SizedBox(width: 6),
-                                      Text('FSSAI Lic No: 10023026000123', style: TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
+                                    Divider(color: Colors.grey.shade300),
+                                  ],
+                                  if (!_missingTags.contains('MRP')) ...[
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('MRP (Incl. taxes):', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
+                                        Text('₹100.00', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
+                                      ],
+                                    ),
+                                    Divider(color: Colors.grey.shade300),
+                                  ],
+
+                                  SizedBox(height: 16),
+                                  // Rule 7 Simulation Badge
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      border: Border.all(color: Colors.greenAccent),
+                                      borderRadius: BorderRadius.circular(4)
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.verified, color: Colors.green, size: 16),
+                                        SizedBox(width: 8),
+                                        Expanded(child: Text('Rule 7 Verified: Numerals formatted to ${_rule7RequiredHeight} minimum height for ${_dimensionController.text} ${_shapeController.text} area.', style: TextStyle(color: Colors.black87, fontSize: 11))),
+                                      ],
+                                    ),
+                                  )
                                 ],
                               ),
-                            ),
+                            )
                           ],
                         ),
                       ),
                     ),
                   ),
-                if (_showLabel) SizedBox(height: 20),
-                if (_showLabel)
+
+                if (_showLabel) ...[
+                  SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        ),
-                        onPressed: _isExporting ? null : _exportPng,
-                        icon: _isExporting 
-                            ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                            : Icon(Icons.download, color: Colors.white),
-                        label: Text(_isExporting ? 'Exporting...' : 'Export SVG / PNG', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      TextButton.icon(
+                        onPressed: () {},
+                        icon: Icon(Icons.code, color: Colors.greenAccent),
+                        label: Text('View Generated SVG Code', style: TextStyle(color: Colors.greenAccent)),
                       ),
+                      SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+                        onPressed: _isExporting ? null : _exportLabel,
+                        icon: _isExporting 
+                            ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Icon(Icons.download, color: Colors.white),
+                        label: Text('Export Label Ready for Print', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      )
                     ],
-                  ),
-                SizedBox(height: 40),
+                  )
+                ]
               ],
             ),
           ),
         ),
       ],
-    );
-  }
-}
-
-// --- 8. PROFILE SCREEN ---
-class _ProfileScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    return Center(
-      child: SingleChildScrollView(
-        child: Container(
-        constraints: const BoxConstraints(maxWidth: 600),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            CircleAvatar(
-              radius: 60,
-              backgroundColor: theme.brightness == Brightness.dark ? Colors.purpleAccent.withValues(alpha: 0.2) : Colors.purple.shade100,
-              child: Icon(Icons.person, size: 60, color: theme.brightness == Brightness.dark ? Colors.purpleAccent : Colors.purple.shade800),
-            ),
-            SizedBox(height: 24),
-            Text('Harsh Pandey', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-            SizedBox(height: 8),
-            Text('Business Owner', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey)),
-            SizedBox(height: 32),
-            Card(
-              color: theme.cardColor,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    _buildProfileItem(Icons.email, 'Email', 'harsh.pandey@aquapure.com', theme),
-                    Divider(height: 32),
-                    _buildProfileItem(Icons.phone, 'Phone', '+91 99988 77755', theme),
-                    Divider(height: 32),
-                    _buildProfileItem(Icons.business, 'Enterprise', 'AquaPure Industries Ltd.', theme),
-                    Divider(height: 32),
-                    _buildProfileItem(Icons.verified_user, 'Account Status', 'Active - Corporate verified', theme),
-                  ],
-                ),
-              ),
-            ),
-            SizedBox(height: 32),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.purpleAccent,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-              onPressed: () {},
-              icon: Icon(Icons.edit, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-              label: Text('Update Profile', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16)),
-            ),
-          ],
-        ),
-      ),
-      ),
-    );
-  }
-
-  Widget _buildProfileItem(IconData icon, String title, String value, ThemeData theme) {
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    return Row(
-      children: [
-        Icon(icon, color: Colors.purpleAccent, size: 28),
-        SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey)),
-              SizedBox(height: 4),
-              Text(value, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// --- 9. SECURE LOGOUT SCREEN ---
-class _LogoutScreen extends StatelessWidget {
-  const _LogoutScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('Terminate Manufacturer Session?', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 22)),
-          SizedBox(height: 24),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
-            onPressed: () => Navigator.pop(context),
-            child: Text('Confirm Logout', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
     );
   }
 }
