@@ -26,7 +26,10 @@ def analyze_ar_scan(
     results = []
     temp_paths = []
     
+    global_found_tags = set()
+    
     try:
+        # Phase 1: Run OCR on all images to gather all found tags
         for image in images:
             suffix = os.path.splitext(image.filename or ".jpg")[1]
             if not suffix:
@@ -34,8 +37,10 @@ def analyze_ar_scan(
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 shutil.copyfileobj(image.file, tmp)
                 temp_path = tmp.name
-            temp_paths.append(temp_path)
+            temp_paths.append((image.filename, temp_path))
             
+        raw_analyses = []
+        for filename, temp_path in temp_paths:
             try:
                 analysis = analyze_product_label(
                     image_path=temp_path, 
@@ -48,47 +53,53 @@ def analyze_ar_scan(
                     weight_under_10g=weight_under_10g,
                     is_medical_device=is_medical_device
                 )
+                
+                # Aggregate found tags
+                for decl in analysis.get("declarations", []):
+                    if decl.get("is_compliant", False):
+                        global_found_tags.add(decl["tag"].upper())
+                
+                if "LANGUAGE_CHECK" not in analysis.get("missing_tags", []):
+                    global_found_tags.add("LANGUAGE_CHECK")
+                    
+                raw_analyses.append((filename, temp_path, analysis))
             except Exception as e:
-                analysis = {
+                raw_analyses.append((filename, temp_path, {
                     "status": "ERROR",
                     "error": f"OCR processing failed: {str(e)}",
-                    "declarations": []
-                }
-
+                    "declarations": [],
+                    "missing_tags": []
+                }))
+                
+        # Phase 2: Post-process to remove globally found tags from missing lists
+        for filename, temp_path, analysis in raw_analyses:
+            if analysis.get("status") != "ERROR":
+                # Remove tags from missing_tags if they were found on ANY image
+                original_missing = analysis.get("missing_tags", [])
+                new_missing = [tag for tag in original_missing if tag not in global_found_tags]
+                analysis["missing_tags"] = new_missing
+                
+                # Update status for the specific image
+                has_non_compliant_decl = any(not d["is_compliant"] for d in analysis.get("declarations", []))
+                
+                # An image is "COMPLIANT" if it has no missing tags AND no non-compliant declarations
+                if len(new_missing) == 0 and not has_non_compliant_decl:
+                    analysis["status"] = "COMPLIANT"
+                else:
+                    analysis["status"] = "NON_COMPLIANT"
+            
             results.append({
-                "filename": image.filename,
+                "filename": filename,
                 "analysis": analysis
             })
             
-            # Log this scan into the database architecture
-            if analysis.get("status") != "ERROR":
-                is_compliant = analysis.get("status") == "COMPLIANT"
-                declarations = analysis.get("declarations", [])
-                
-                # Missing tags are determined dynamically by the engine now
-                missing = analysis.get("missing_tags", [])
-                
-                try:
-                    log_scan_result(
-                        db=db, 
-                        category_id=category_id, 
-                        is_compliant=is_compliant, 
-                        missing_tags=missing, 
-                        confidence_score=0.99
-                    )
-                except Exception:
-                    pass
-            
-        return {
-            "status": "SUCCESS",
-            "total_scanned": len(results),
-            "results": results
-        }
-        
-    finally:
-        for temp_path in temp_paths:
+            # Cleanup temp file
             if os.path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except Exception:
-                    pass
+                os.remove(temp_path)
+                
+        return {"status": "SUCCESS", "results": results}
+    except Exception as e:
+        for _, temp_path in temp_paths:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        return {"status": "ERROR", "error": str(e)}
