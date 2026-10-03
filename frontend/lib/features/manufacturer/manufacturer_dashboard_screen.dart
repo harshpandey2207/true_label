@@ -10,6 +10,7 @@ import '../../core/report_viewer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api_service.dart';
+import '../../core/svg_export.dart';
 
 class ManufacturerDashboard extends StatefulWidget {
   const ManufacturerDashboard({super.key});
@@ -43,11 +44,11 @@ class _ManufacturerDashboardState extends State<ManufacturerDashboard> {
         SidebarXItem(icon: Icons.dashboard_outlined, label: 'Workspace Overview'),
         SidebarXItem(icon: Icons.business_center, label: 'Enterprise Registry'),
         SidebarXItem(icon: Icons.folder_shared, label: 'Audit & Reports'),
-        SidebarXItem(icon: Icons.receipt_long, label: 'Statutory Fines'),
-        SidebarXItem(icon: Icons.mark_email_unread, label: 'Active Legal Notices'),
-        SidebarXItem(icon: Icons.auto_awesome, label: 'AI Label Studio'),
+        SidebarXItem(icon: Icons.receipt_long, label: 'Penalty Demo'),
+        SidebarXItem(icon: Icons.mark_email_unread, label: 'Notice Workflow Demo'),
+        SidebarXItem(icon: Icons.auto_awesome, label: 'Label Draft Studio'),
         SidebarXItem(icon: Icons.person, label: 'Manufacturer Profile'),
-        SidebarXItem(icon: Icons.logout, label: 'Secure Logout'),
+        SidebarXItem(icon: Icons.logout, label: 'Back to role selection'),
       ],
     );
   }
@@ -103,6 +104,8 @@ class _ManufacturerScreensRouter extends StatefulWidget {
 
 class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> {
   String _missingTagsForGenerator = "";
+  Map<String, String> _scannedTagValuesForGenerator = {};
+  String _generatorCategory = 'General Packaged Commodity';
 
   @override
   Widget build(BuildContext context) {
@@ -112,9 +115,11 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
       builder: (context, child) {
         switch (widget.controller.selectedIndex) {
           case 0: return _BusinessOwnerScannerScreen(
-            onNavigateToGenerator: (missingTags) {
+            onNavigateToGenerator: (missingTags, tagValues, category) {
               setState(() {
                 _missingTagsForGenerator = missingTags;
+                _scannedTagValuesForGenerator = tagValues;
+                _generatorCategory = category;
               });
               widget.controller.selectIndex(6); // Switch to AI Label Generator
             },
@@ -124,7 +129,11 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
           case 3: return _BusinessOwnerRepositoryScreen();
           case 4: return _StatutoryFinesScreen();
           case 5: return _LegalNoticesScreen();
-          case 6: return _AILabelGeneratorScreen(initialMissingTags: _missingTagsForGenerator);
+          case 6: return _AILabelGeneratorScreen(
+            initialMissingTags: _missingTagsForGenerator,
+            initialTagValues: _scannedTagValuesForGenerator,
+            initialCategory: _generatorCategory,
+          );
           case 7: return Center(child: Text('Manufacturer Profile'));
           case 8: return Center(child: Text('Logout'));
           default: return Center(child: Text('Screen not found', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)));
@@ -136,7 +145,7 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
 
 // --- 1. PRE-MARKET SCANNER WITH CATEGORY SELECTOR ---
 class _BusinessOwnerScannerScreen extends StatefulWidget {
-  final Function(String missingTags)? onNavigateToGenerator;
+  final Function(String missingTags, Map<String, String> tagValues, String category)? onNavigateToGenerator;
   const _BusinessOwnerScannerScreen({super.key, this.onNavigateToGenerator});
 
   @override
@@ -145,7 +154,7 @@ class _BusinessOwnerScannerScreen extends StatefulWidget {
 
 class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScreen> {
   int _scanState = 0; 
-  String _processingText = "Initializing AI Vision...";
+  String _processingText = "Preparing local text recognition...";
   String _selectedCategory = 'General Packaged Commodity';
   
   final List<XFile> _capturedImages = []; 
@@ -159,31 +168,44 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
     'Electronics & Appliances',
     'Cosmetics, Ointments & Pharma Goods',
     'Apparel & Textiles',
+    'Medical Devices',
   ];
 
   Future<void> _pickCameraImage() async {
+    if (_capturedImages.length >= 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A scan can include up to six package-side images.')));
+      return;
+    }
     final XFile? photo = await _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 70, 
       maxWidth: 1200,   
       maxHeight: 1200,
     );
-    if (photo == null) return;
+    if (!mounted || photo == null) return;
     setState(() {
       _capturedImages.add(photo);
     });
   }
 
   Future<void> _pickMultipleGalleryImages() async {
+    final remaining = 6 - _capturedImages.length;
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A scan can include up to six package-side images.')));
+      return;
+    }
     final List<XFile> photos = await _picker.pickMultiImage(
       imageQuality: 70,
       maxWidth: 1200,
       maxHeight: 1200,
     );
-    if (photos.isNotEmpty) {
+    if (mounted && photos.isNotEmpty) {
       setState(() {
-        _capturedImages.addAll(photos);
+        _capturedImages.addAll(photos.take(remaining));
       });
+      if (photos.length > remaining) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This scan supports six images. Extra selections were skipped.')));
+      }
     }
   }
 
@@ -200,13 +222,13 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
         imageFiles: _capturedImages,
         distanceMm: 300.0,
         focalLengthPx: 800.0,
-        categoryId: _productCategories.indexOf(_selectedCategory) + 1,
+        categoryName: _selectedCategory,
       );
 
       if (result != null && result['status'] == 'SUCCESS') {
         setState(() {
           _analysisResults = result['results'];
-          _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'COMPLIANT');
+          _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'NO_FLAGS');
           _scanState = 2;
         });
       } else {
@@ -306,7 +328,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   SizedBox(height: 16),
                   Text('Capture all sides of the product packaging', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
                   SizedBox(height: 8),
-                  Text('Ensure high-resolution images of the Principal Display Panel (PDP) and back labels for OCR Rule 7 geometry analysis.', 
+                  Text('Upload clear, straight-on photos of the front, back and other package sides. Text-size values are rough estimates and are not used to determine scan status.',
                     textAlign: TextAlign.center, style: TextStyle(color: textMuted, fontSize: 14)),
                   SizedBox(height: 24),
                   Row(
@@ -434,14 +456,14 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   ),
                   SizedBox(height: 12),
                   Text(
-                    _overallCompliance ? 'Product is Fully Compliant!' : 'Product is Non-Compliant',
+                        _overallCompliance ? 'No issues detected in this scan' : 'Potential label issues detected',
                     style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   SizedBox(height: 8),
                   Text(
                     _overallCompliance 
-                        ? 'All mandatory declarations under the Legal Metrology Act, 2011 were detected.'
-                        : 'Missing mandatory declarations or formatting errors detected. See report below.',
+                        ? 'The prototype screening found no flags in its selected checks. Text-size values are rough estimates and are not used to determine status. Review current requirements before relying on this result.'
+                        : 'Some declarations were not found or need review. Text-size values are rough estimates; check the source images, current requirements and findings below.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: textMuted, fontSize: 14),
                   ),
@@ -454,11 +476,22 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
                         onPressed: () {
                           if (widget.onNavigateToGenerator != null) {
-                            widget.onNavigateToGenerator!(missingTagsString);
+                            final tagValues = <String, String>{};
+                            for (final result in _analysisResults ?? const []) {
+                              final analysis = result['analysis'] as Map<String, dynamic>? ?? {};
+                              for (final declaration in (analysis['declarations'] as List? ?? const [])) {
+                                final tag = declaration['tag']?.toString() ?? '';
+                                final value = declaration['text']?.toString() ?? '';
+                                if (tag.isNotEmpty && tag.toUpperCase() != 'GENERAL' && value.isNotEmpty) {
+                                  tagValues.putIfAbsent(tag, () => value);
+                                }
+                              }
+                            }
+                            widget.onNavigateToGenerator!(missingTagsString, tagValues, _selectedCategory);
                           }
                         },
                         icon: Icon(Icons.auto_awesome, color: Colors.white),
-                        label: Text('REMEDIATE WITH AI LABEL GENERATOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        label: Text('CREATE A LABEL DRAFT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     )
                   ]
@@ -476,26 +509,26 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
               itemBuilder: (context, index) {
                 final result = _analysisResults![index];
                 final analysis = result['analysis'];
-                final bool isCompliant = analysis['status'] == 'COMPLIANT';
+                final bool noFlags = analysis['status'] == 'NO_FLAGS';
                 
                 return Card(
                   color: theme.cardColor,
                   margin: EdgeInsets.only(bottom: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: isCompliant ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.5)),
+                    side: BorderSide(color: noFlags ? Colors.green.withValues(alpha: 0.5) : Colors.red.withValues(alpha: 0.5)),
                   ),
                   child: ExpansionTile(
-                    title: Text('Image ${index + 1}: ${isCompliant ? "Passed" : "Failed"}', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+                    title: Text('Image ${index + 1}: ${noFlags ? "No flags" : "Potential flags"}', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
                     subtitle: Text('${analysis['declarations']?.length ?? 0} declarations found', style: TextStyle(color: textMuted)),
-                    leading: Icon(isCompliant ? Icons.check_circle : Icons.cancel, color: isCompliant ? Colors.green : Colors.red),
+                    leading: Icon(noFlags ? Icons.check_circle : Icons.cancel, color: noFlags ? Colors.green : Colors.red),
                     children: [
                       Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('As per rules applicable on this product:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('Prototype screening findings — verify rule applicability:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
                               SizedBox(height: 12),
                               
                               // 1. Show Detected Mandatory Rules
@@ -517,7 +550,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                                     contentPadding: EdgeInsets.zero,
                                     leading: Icon(Icons.cancel, color: Colors.red),
                                     title: Text(t.toString(), style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    subtitle: Text("Missing mandatory declaration. Zero compliance.", style: TextStyle(color: textMuted, fontSize: 12)),
+                                    subtitle: Text("Not detected in the selected prototype rule set. Verify against the package and applicable rules.", style: TextStyle(color: textMuted, fontSize: 12)),
                                   );
                                 }).toList()),
                           ],
@@ -552,7 +585,9 @@ class _ManufacturerOverviewScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Manufacturer Operations Workspace', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+          Text('Manufacturer Operations Workspace (Sample)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('Static demonstration numbers; product registry and audit records are not connected.', style: TextStyle(color: textMuted)),
           SizedBox(height: 24),
           _buildStatCard('Registered SKUs', registeredSKUs.toString(), Colors.blueAccent, theme),
           SizedBox(height: 12),
@@ -598,9 +633,9 @@ class _EnterpriseRegistryScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Enterprise & Compliance Registry', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Text('Enterprise & Compliance Registry (Sample)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
         SizedBox(height: 8),
-        Text('Official business identity, GSTIN registration, packer licenses, and certified product ledger.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+        Text('Demo profile data only. No business identity, licence or product registry is connected.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
         SizedBox(height: 24),
         Expanded(
           child: ListView(
@@ -636,14 +671,14 @@ class _EnterpriseRegistryScreen extends StatelessWidget {
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(Icons.inventory, color: Colors.greenAccent),
                         title: Text('AquaPure Packaged Drinking Water 1L', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                        subtitle: Text('SKU ID: SKU-8841 | Rule 6 & 7 Certified', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+                        subtitle: Text('Sample SKU ID: SKU-8841 | No certification is connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
                         trailing: Text('Active', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                       ),
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(Icons.inventory, color: Colors.greenAccent),
                         title: Text('AquaPure Mineral Water 500ml', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                        subtitle: Text('SKU ID: SKU-8842 | Rule 6 & 7 Certified', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+                        subtitle: Text('Sample SKU ID: SKU-8842 | No certification is connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
                         trailing: Text('Active', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                       ),
                     ],
@@ -686,14 +721,16 @@ class _BusinessOwnerRepositoryScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Internal Audit & Compliance Repository', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Text('Sample Audit & Reports', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        Text('Static sample records. A report preview is an automated screening summary, not an official document.', style: TextStyle(color: textMuted)),
         SizedBox(height: 24),
         Expanded(
           child: ListView.builder(
             itemCount: manufacturerLogs.length,
             itemBuilder: (context, index) {
               final log = manufacturerLogs[index];
-              final isFlagged = log['status'] == 'Flagged';
+              final isFlagged = log['status'].toString().toLowerCase().contains('flag');
               return ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: Icon(isFlagged ? Icons.warning : Icons.check_circle, color: isFlagged ? Colors.redAccent : Colors.greenAccent),
@@ -703,7 +740,7 @@ class _BusinessOwnerRepositoryScreen extends StatelessWidget {
                   icon: Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
                   tooltip: 'View Report PDF',
                   onPressed: () {
-                    ReportViewer.showPdfDialog(context: context, reportId: 'AUDIT-${1024 + index}', product: 'AquaPure 1L Water Bottle', violation: isFlagged ? 'Missing MRP (Rule 6)' : 'None');
+                    ReportViewer.showPdfDialog(context: context, reportId: 'AUDIT-${1024 + index}', product: 'AquaPure 1L Water Bottle', findingsOrNotes: isFlagged ? 'Sample: MRP field needs review.' : 'Sample: no flags in the configured checks.', noFlagsDetected: !isFlagged);
                   },
                 ),
               );
@@ -725,8 +762,10 @@ class _StatutoryFinesScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Statutory Fines & Penalty Management', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Text('Penalty Workflow Demo', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
         SizedBox(height: 24),
+        Text('The example record below is sample data. This screen is not connected to a regulator, payment service or official notice system.', style: TextStyle(color: textMuted)),
+        SizedBox(height: 12),
         Card(
           color: const Color(0xFF2A1616),
           shape: RoundedRectangleBorder(side: BorderSide(color: Colors.redAccent, width: 1), borderRadius: BorderRadius.circular(8)),
@@ -738,23 +777,21 @@ class _StatutoryFinesScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(child: Text('INFRACTION: Rule 6 Violation - Missing MRP', style: TextStyle(color: Colors.redAccent, fontSize: 20, fontWeight: FontWeight.bold))),
+                    Expanded(child: Text('SAMPLE: Potential missing MRP field', style: TextStyle(color: Colors.redAccent, fontSize: 20, fontWeight: FontWeight.bold))),
                   ],
                 ),
                 SizedBox(height: 4),
-                Text('Issued: Oct 16, 2026', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+                Text('Sample record', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
                 SizedBox(height: 12),
-                Text('Product: AquaPure 1L (ID: REP-2026-942)\nPenalty Amount: ₹ 2,000', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, height: 1.5)),
+                Text('Example product: AquaPure 1L\nExample amount: ₹ 2,000', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, height: 1.5)),
                 SizedBox(height: 20),
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(vertical: 12)),
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Payment Successful. Receipt stored in repository.'), backgroundColor: Colors.green));
-                    },
+                    onPressed: null,
                     icon: Icon(Icons.payment, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-                    label: Text('Pay Fine ₹ 2,000', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+                    label: Text('Payment service not connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
                   ),
                 ),
                 SizedBox(height: 16),
@@ -762,9 +799,9 @@ class _StatutoryFinesScreen extends StatelessWidget {
                   width: double.infinity,
                   child: OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(side: BorderSide(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87), padding: const EdgeInsets.symmetric(vertical: 12)),
-                    onPressed: () {},
+                    onPressed: null,
                     icon: Icon(Icons.download, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-                    label: Text('Download Official PDF', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+                    label: Text('Official PDF unavailable', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
                   ),
                 )
               ],
@@ -786,7 +823,9 @@ class _LegalNoticesScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Active Legal Notices & Directives', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Text('Notice Workflow Demo', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        Text('The example below is not an issued notice and is not connected to a regulator.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
         SizedBox(height: 24),
         Expanded(
           child: Card(
@@ -797,10 +836,10 @@ class _LegalNoticesScreen extends StatelessWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: Icon(Icons.warning, color: Colors.orangeAccent),
-                  title: Text('Notice #NOT-2026-112: Packaging Verification Directive', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+                  title: Text('Sample notice: Packaging verification', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
                   subtitle: Padding(
                     padding: EdgeInsets.only(top: 8.0),
-                    child: Text('Administration requires immediate re-verification of Batch #401 font sizing parameters under Legal Metrology Rule 7.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+                    child: Text('This example shows where a manual review reminder could appear. No case or batch record is connected.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
                   ),
                 ),
               ],
@@ -815,7 +854,14 @@ class _LegalNoticesScreen extends StatelessWidget {
 // --- 7. AI LABEL STUDIO (DYNAMIC GENERATION) ---
 class _AILabelGeneratorScreen extends StatefulWidget {
   final String? initialMissingTags;
-  const _AILabelGeneratorScreen({super.key, this.initialMissingTags});
+  final Map<String, String> initialTagValues;
+  final String initialCategory;
+  const _AILabelGeneratorScreen({
+    super.key,
+    this.initialMissingTags,
+    this.initialTagValues = const {},
+    this.initialCategory = 'General Packaged Commodity',
+  });
 
   @override
   __AILabelGeneratorScreenState createState() => __AILabelGeneratorScreenState();
@@ -823,20 +869,22 @@ class _AILabelGeneratorScreen extends StatefulWidget {
 
 class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with TickerProviderStateMixin {
   bool _isGenerating = false;
-  bool _hasReferenceImages = false;
   Map<String, dynamic>? _labelData;
   String? _errorMessage;
-  String? _uspAutoCalc;
+  String? _engineInfo;
+  List<String> _warnings = [];
   int _selectedSideIndex = 0;
   TabController? _sideTabController;
+  String _selectedCategory = 'General Packaged Commodity';
+  int _sideCount = 2;
 
   final _productNameController = TextEditingController(text: 'My Product');
-  final _shapeController = TextEditingController(text: 'Rectangular');
-  final _dimensionController = TextEditingController(text: '10cm x 15cm');
-  final _promptController = TextEditingController(text: 'Make it look premium and professional. Follow brand colors from uploaded images.');
+  final _shapeController = TextEditingController();
+  final _dimensionController = TextEditingController();
+  final _promptController = TextEditingController();
+  final _additionalDetailsController = TextEditingController();
   
-  // Dynamic controllers for missing tags (excluding USP - auto calculated)
-  final Map<String, TextEditingController> _missingTagControllers = {};
+  final Map<String, TextEditingController> _labelValueControllers = {};
   List<String> _missingTags = [];
   
   final List<XFile> _referenceImages = [];
@@ -845,15 +893,11 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
   @override
   void initState() {
     super.initState();
+    _selectedCategory = widget.initialCategory;
     if (widget.initialMissingTags != null && widget.initialMissingTags!.isNotEmpty) {
-      _missingTags = widget.initialMissingTags!.split(',').map((e) => e.trim()).where((t) {
-        // Filter out USP - it will be auto-calculated from MRP
-        return t.toUpperCase() != 'USP' && t.toUpperCase() != 'UNIT_SALE_PRICE';
-      }).toList();
-      for (var tag in _missingTags) {
-        _missingTagControllers[tag] = TextEditingController();
-      }
+      _missingTags = widget.initialMissingTags!.split(',').map((e) => e.trim()).where((t) => t.isNotEmpty).toList();
     }
+    _ensureValueControllers();
   }
 
   @override
@@ -862,8 +906,9 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
     _shapeController.dispose();
     _dimensionController.dispose();
     _promptController.dispose();
+    _additionalDetailsController.dispose();
     _sideTabController?.dispose();
-    for (var c in _missingTagControllers.values) {
+    for (var c in _labelValueControllers.values) {
       c.dispose();
     }
     super.dispose();
@@ -874,28 +919,90 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
     if (photos.isNotEmpty) {
       setState(() {
         _referenceImages.clear();
-        _referenceImages.addAll(photos);
-        _hasReferenceImages = true;
+        _referenceImages.addAll(photos.take(6));
       });
+      if (photos.length > 6 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Use up to six package-side images. The first six were selected.')),
+        );
+      }
+    }
+  }
+
+  List<String> _categoryFields(String category) {
+    const categoryFields = <String, List<String>>{
+      'Food & Beverages': ['batch_code', 'best_before_date', 'fssai_license', 'veg_non_veg_logo', 'ingredients'],
+      'Electronics & Appliances': ['model', 'bis_mark', 'country_of_origin', 'e_waste_info'],
+      'Cosmetics, Ointments & Pharma Goods': ['batch_code', 'expiry_date', 'manufacturing_license', 'ingredients'],
+      'Apparel & Textiles': ['size', 'fibre_content', 'country_of_origin'],
+      'Medical Devices': ['batch_code', 'serial_number', 'license_no', 'sterile_status'],
+    };
+    return [
+      'manufacturer', 'commodity_name', 'net_quantity', 'manufacturing_date', 'mrp', 'unit_sale_price', 'consumer_care',
+      ...(categoryFields[category] ?? const <String>[]),
+    ];
+  }
+
+  String _fieldTitle(String tag) {
+    const labels = <String, String>{
+      'manufacturer': 'Manufacturer / packer / importer details',
+      'commodity_name': 'Common / generic commodity name',
+      'net_quantity': 'Net quantity',
+      'manufacturing_date': 'Manufacturing / packing date',
+      'mrp': 'MRP (inclusive of taxes)',
+      'consumer_care': 'Consumer care details',
+      'unit_sale_price': 'Unit sale price (if applicable)',
+      'batch_code': 'Batch / lot number',
+      'best_before_date': 'Best before / expiry',
+      'fssai_license': 'FSSAI licence / registration',
+      'veg_non_veg_logo': 'Food symbol / declaration',
+      'ingredients': 'Ingredients / allergen information',
+      'bis_mark': 'BIS registration / mark (if applicable)',
+      'model': 'Model / product ID',
+      'country_of_origin': 'Country of origin',
+      'e_waste_info': 'E-waste information (if applicable)',
+      'manufacturing_license': 'Manufacturing licence',
+      'expiry_date': 'Expiry date',
+      'size': 'Size',
+      'fibre_content': 'Fibre content',
+      'serial_number': 'Serial number',
+      'license_no': 'Licence number',
+      'sterile_status': 'Sterile status',
+      'language_check': 'Language / declaration text',
+    };
+    final key = tag.toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
+    return labels[key] ?? tag.replaceAll('_', ' ').toLowerCase().split(' ').map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}').join(' ');
+  }
+
+  void _ensureValueControllers() {
+    final keys = <String>{
+      ..._categoryFields(_selectedCategory),
+      ..._missingTags.map((tag) => tag.toLowerCase()),
+      ...widget.initialTagValues.keys.map((tag) => tag.toLowerCase()),
+    };
+    for (final tag in keys) {
+      _labelValueControllers.putIfAbsent(
+        tag,
+        () {
+          final entry = widget.initialTagValues.entries.firstWhere(
+            (entry) => entry.key.toLowerCase() == tag,
+            orElse: () => const MapEntry('', ''),
+          );
+          return TextEditingController(text: entry.value);
+        },
+      );
     }
   }
 
   Future<void> _generateLabel() async {
     // Validate required fields
     for (var tag in _missingTags) {
-      if (_missingTagControllers[tag]!.text.trim().isEmpty) {
+      if (_labelValueControllers[tag.toLowerCase()]?.text.trim().isEmpty ?? true) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Please provide a value for: $tag'), backgroundColor: Colors.red),
         );
         return;
       }
-    }
-
-    if (_referenceImages.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please upload at least one reference label image'), backgroundColor: Colors.red),
-      );
-      return;
     }
 
     setState(() {
@@ -904,20 +1011,23 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
       _labelData = null;
     });
 
-    // Build missing tag values map
     final Map<String, String> tagValues = {};
-    for (var tag in _missingTags) {
-      tagValues[tag] = _missingTagControllers[tag]!.text.trim();
+    for (final entry in _labelValueControllers.entries) {
+      if (entry.value.text.trim().isNotEmpty) {
+        tagValues[entry.key] = entry.value.text.trim();
+      }
     }
 
     final result = await ApiService.generateLabel(
       imageFiles: _referenceImages,
       productName: _productNameController.text.trim(),
-      productCategory: 'General Packaged Commodity',
+      productCategory: _selectedCategory,
       shape: _shapeController.text.trim(),
       dimensions: _dimensionController.text.trim(),
       customPrompt: _promptController.text.trim(),
       missingTagValues: tagValues,
+      additionalDetails: _additionalDetailsController.text.trim(),
+      sideCount: _sideCount,
     );
 
     if (!mounted) return;
@@ -925,18 +1035,18 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
     if (result != null && result['success'] == true) {
       final sides = (result['label_data']['sides'] as List?) ?? [];
       _sideTabController?.dispose();
-      _sideTabController = TabController(length: sides.length, vsync: this);
+      _sideTabController = sides.isEmpty ? null : TabController(length: sides.length, vsync: this);
       setState(() {
         _isGenerating = false;
         _labelData = result['label_data'];
-        _uspAutoCalc = result['usp_auto_calculated'];
-        _errorMessage = 'Powered by ' + (result['model_used'] ?? 'AI'); // Hack to show model in UI easily
+        _engineInfo = result['engine_used']?.toString();
+        _warnings = (result['warnings'] as List? ?? const []).map((value) => value.toString()).toList();
         _selectedSideIndex = 0;
       });
     } else {
       setState(() {
         _isGenerating = false;
-        _errorMessage = result?['error'] ?? 'Unknown error from AI';
+        _errorMessage = result?['error'] ?? 'Could not generate this label draft.';
       });
     }
   }
@@ -945,8 +1055,9 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
     setState(() {
       _labelData = null;
       _errorMessage = null;
+      _engineInfo = null;
+      _warnings = [];
       _referenceImages.clear();
-      _hasReferenceImages = false;
     });
   }
 
@@ -1007,7 +1118,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
           if (svgCode.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(16),
-              // We use flutter_svg to render the raw SVG generated by Llama Vision
+              // The API returns locally-rendered SVG using escaped user copy.
               child: SvgPicture.string(
                 svgCode,
                 fit: BoxFit.contain,
@@ -1020,7 +1131,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
           else
             const Padding(
               padding: EdgeInsets.all(32.0),
-              child: Center(child: Text("AI did not return valid SVG code for this side.", style: TextStyle(color: Colors.red))),
+              child: Center(child: Text("No artwork was returned for this side.", style: TextStyle(color: Colors.red))),
             ),
         ],
       ),
@@ -1035,6 +1146,9 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
 
     final sides = (_labelData?['sides'] as List?) ?? [];
     final brandDna = (_labelData?['brand_dna'] as Map?) ?? {};
+    final selectedSide = sides.isNotEmpty
+        ? sides[_selectedSideIndex] as Map<String, dynamic>
+        : <String, dynamic>{};
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1046,9 +1160,9 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Generative AI Label Remediation Studio', style: TextStyle(color: textColor, fontSize: 26, fontWeight: FontWeight.bold)),
+                  Text('Label Draft Studio', style: TextStyle(color: textColor, fontSize: 26, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('Upload your current label images → Gemini Vision AI analyzes brand DNA → Generates a compliant label per side', style: TextStyle(color: textMuted, fontSize: 13)),
+                  Text('Create side-by-side editable SVG drafts from package photos or a written brief. Review every declaration before printing.', style: TextStyle(color: textMuted, fontSize: 13)),
                 ],
               ),
             ),
@@ -1071,8 +1185,8 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 1. Upload images
-                          Text('1. Upload Reference Label Images (all sides)', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          // Reference images are optional: prompt-only label drafts are supported.
+                          Text('1. Reference package photos (optional)', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           GestureDetector(
                             onTap: _pickImages,
@@ -1080,64 +1194,97 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                               width: double.infinity,
                               height: 120,
                               decoration: BoxDecoration(
-                                border: Border.all(color: _hasReferenceImages ? Colors.greenAccent : textMuted, width: 2),
+                                border: Border.all(color: _referenceImages.isNotEmpty ? Colors.greenAccent : textMuted, width: 2),
                                 borderRadius: BorderRadius.circular(8),
-                                color: _hasReferenceImages ? Colors.greenAccent.withValues(alpha: 0.05) : theme.cardColor,
+                                color: _referenceImages.isNotEmpty ? Colors.greenAccent.withValues(alpha: 0.05) : theme.cardColor,
                               ),
                               child: Center(
-                                child: _hasReferenceImages
+                                child: _referenceImages.isNotEmpty
                                   ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                                       const Icon(Icons.check_circle, color: Colors.greenAccent, size: 32),
                                       const SizedBox(height: 8),
-                                      Text('${_referenceImages.length} image(s) uploaded — Gemini will generate 1 label per image', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                                      Text('${_referenceImages.length} image(s) selected — one draft will be made per image', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                                      const SizedBox(height: 4),
+                                      Text(_referenceImages.map((image) => image.name).join('  •  '), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: textMuted, fontSize: 11)),
                                     ])
                                   : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                                       Icon(Icons.cloud_upload_outlined, color: textMuted, size: 32),
                                       const SizedBox(height: 8),
-                                      Text('Tap to upload all sides of the product label', style: TextStyle(color: textMuted)),
-                                      Text('e.g. Front, Back, Left, Right', style: TextStyle(color: textMuted, fontSize: 12)),
+                                      Text('Tap to upload front, back or other side photos', style: TextStyle(color: textMuted)),
+                                      Text('Files named Front, Back, Left, Right, Top or Bottom keep those side names.', style: TextStyle(color: textMuted, fontSize: 12)),
                                     ]),
                               ),
                             ),
                           ),
                           const SizedBox(height: 24),
 
-                          // 2. Product details
-                          Text('2. Product Details & Shape', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          Text('2. Product and package details', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
-                          Row(children: [
-                            Expanded(child: _buildInputField('Product Name', _productNameController, 'e.g. Pure Honey 500g', theme)),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildInputField('Shape', _shapeController, 'e.g. Cylindrical, Rectangular', theme)),
-                            const SizedBox(width: 12),
-                            Expanded(child: _buildInputField('Dimensions', _dimensionController, 'e.g. 10cm x 15cm', theme)),
+                          DropdownButtonFormField<String>(
+                            value: _selectedCategory,
+                            decoration: const InputDecoration(labelText: 'Product category'),
+                            items: const [
+                              'General Packaged Commodity', 'Food & Beverages', 'Electronics & Appliances',
+                              'Cosmetics, Ointments & Pharma Goods', 'Apparel & Textiles', 'Medical Devices',
+                            ].map((category) => DropdownMenuItem(value: category, child: Text(category))).toList(),
+                            onChanged: (category) {
+                              if (category == null) return;
+                              setState(() {
+                                _selectedCategory = category;
+                                _ensureValueControllers();
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(spacing: 12, runSpacing: 12, children: [
+                            SizedBox(width: (MediaQuery.of(context).size.width / 2) - 48, child: _buildInputField('Product name', _productNameController, 'e.g. Pure Honey', theme)),
+                            SizedBox(width: (MediaQuery.of(context).size.width / 2) - 48, child: _buildInputField('Package shape', _shapeController, 'e.g. carton, bottle, pouch', theme)),
+                            SizedBox(width: (MediaQuery.of(context).size.width / 2) - 48, child: _buildInputField('Finished label size', _dimensionController, 'e.g. 10 cm x 15 cm', theme)),
                           ]),
                           const SizedBox(height: 24),
 
-                          // 3. Missing mandatory data (if any)
-                          if (_missingTags.isNotEmpty) ...[
-                            Text('3. Fill Missing Mandatory Data (detected by scanner)', style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 4),
-                            Text('USP will be auto-calculated from MRP — no need to enter it manually.', style: TextStyle(color: textMuted, fontSize: 12)),
-                            const SizedBox(height: 12),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: _missingTags.map((tag) {
-                                return SizedBox(
-                                  width: (MediaQuery.of(context).size.width / 2) - 20,
-                                  child: _buildInputField('Missing: $tag', _missingTagControllers[tag]!, 'Value for $tag', theme),
-                                );
-                              }).toList(),
-                            ),
-                            const SizedBox(height: 24),
-                          ],
-
-                          // 4. Custom prompt
-                          Text('${_missingTags.isNotEmpty ? "4" : "3"}. Custom AI Prompt', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          _buildInputField('Design Instructions to AI', _promptController, 'e.g. Use earthy tones, premium look, bold product name', theme, maxLines: 3),
+                          Text('3. Declarations and product copy', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('Scanner values are prefilled where detected. Missing fields are highlighted; enter the exact approved wording.', style: TextStyle(color: textMuted, fontSize: 12)),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: (_categoryFields(_selectedCategory).toSet()
+                                  ..addAll(_missingTags.map((tag) => tag.toLowerCase()))
+                                  ..addAll(widget.initialTagValues.keys.map((tag) => tag.toLowerCase())))
+                                .map((tag) => SizedBox(
+                                  width: (MediaQuery.of(context).size.width / 2) - 48,
+                                  child: _buildInputField(
+                                    _missingTags.any((missing) => missing.toLowerCase() == tag) ? 'Missing in scan: ${_fieldTitle(tag)}' : _fieldTitle(tag),
+                                    _labelValueControllers[tag]!,
+                                    'Enter label text',
+                                    theme,
+                                  ),
+                                )).toList(),
+                          ),
                           const SizedBox(height: 24),
+
+                          Text('4. Extra declarations or product features', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          _buildInputField('Additional label text (one item per line)', _additionalDetailsController, 'e.g. Storage: Keep in a cool, dry place', theme, maxLines: 3),
+                          const SizedBox(height: 20),
+                          Text('5. Design brief', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          _buildInputField('Describe style and features to retain', _promptController, 'e.g. earthy green, minimal, reserve a logo/artwork space', theme, maxLines: 3),
+                          const SizedBox(height: 8),
+                          Text('The local renderer uses the brief for simple style choices and can reserve an artwork box. It does not reproduce logos, photos or barcodes from the reference.', style: TextStyle(color: textMuted, fontSize: 12)),
+                          const SizedBox(height: 24),
+
+                          if (_referenceImages.isEmpty) ...[
+                            DropdownButtonFormField<int>(
+                              value: _sideCount,
+                              decoration: const InputDecoration(labelText: 'Package sides to draft'),
+                              items: const [2, 4, 6].map((count) => DropdownMenuItem(value: count, child: Text('$count sides'))).toList(),
+                              onChanged: (count) => setState(() => _sideCount = count ?? 2),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
 
                           SizedBox(
                             width: double.infinity,
@@ -1149,7 +1296,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
                                   : const Icon(Icons.auto_awesome, color: Colors.black),
                               label: Text(
-                                _isGenerating ? 'Gemini Vision is analyzing & generating labels...' : 'GENERATE AI-POWERED COMPLIANT LABELS',
+                                _isGenerating ? 'Building label drafts...' : 'GENERATE LABEL DRAFTS',
                                 style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.bold),
                               ),
                             ),
@@ -1157,7 +1304,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
 
                           if (_isGenerating) ...[
                             const SizedBox(height: 16),
-                            Center(child: Text('Gemini Vision AI is: reading brand colors, fonts, layout → generating ${_referenceImages.length} label side(s)...', style: TextStyle(color: textMuted, fontSize: 12), textAlign: TextAlign.center)),
+                            Center(child: Text('Applying local templates to ${_referenceImages.isEmpty ? _sideCount : _referenceImages.length} package side(s)...', style: TextStyle(color: textMuted, fontSize: 12), textAlign: TextAlign.center)),
                           ],
 
                           if (_errorMessage != null) ...[
@@ -1177,8 +1324,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                     ),
                   ),
                 ] else ...[
-                  // === AI GENERATED OUTPUT ===
-                  // Brand DNA summary
+                  // === GENERATED DRAFT OUTPUT ===
                   Card(
                     color: theme.cardColor,
                     child: Padding(
@@ -1186,14 +1332,12 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('AI Extracted Brand DNA', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Local style sample', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 14)),
                           const SizedBox(height: 12),
-                          Row(children: [
-                            _colorChip(brandDna['primary_color'] ?? '#1B4332', 'Primary'),
-                            const SizedBox(width: 12),
-                            _colorChip(brandDna['secondary_color'] ?? '#FFFFFF', 'Secondary'),
-                            const SizedBox(width: 12),
-                            _colorChip(brandDna['accent_color'] ?? '#52B788', 'Accent'),
+                          Wrap(spacing: 12, runSpacing: 8, children: [
+                            _colorChip(selectedSide['sampled_primary_color'] ?? brandDna['primary_color'] ?? '#1B4332', 'Primary'),
+                            _colorChip(selectedSide['sampled_secondary_color'] ?? brandDna['secondary_color'] ?? '#FFFFFF', 'Secondary'),
+                            _colorChip(selectedSide['sampled_accent_color'] ?? brandDna['accent_color'] ?? '#52B788', 'Accent'),
                           ]),
                           if ((brandDna['font_style'] ?? '').isNotEmpty) ...[
                             const SizedBox(height: 8),
@@ -1203,23 +1347,30 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                             const SizedBox(height: 4),
                             Text('Design: ${brandDna['design_aesthetic']}', style: TextStyle(color: textMuted, fontSize: 13)),
                           ],
-                          if (_uspAutoCalc != null && _uspAutoCalc!.isNotEmpty) ...[
+                          if (_engineInfo != null) ...[
                             const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.green)),
-                              child: Row(children: [
-                                const Icon(Icons.calculate, color: Colors.green, size: 16),
-                                const SizedBox(width: 8),
-                                Text('USP auto-calculated from MRP: $_uspAutoCalc', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
-                              ]),
-                            ),
+                            Text(_engineInfo!, style: TextStyle(color: textMuted, fontSize: 12)),
                           ],
                         ],
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  if (_warnings.isNotEmpty)
+                    Card(
+                      color: Colors.amber.withValues(alpha: 0.12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(14),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: _warnings.map((warning) => Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: Text('• $warning', style: TextStyle(color: textColor, fontSize: 12)),
+                          )).toList(),
+                        ),
+                      ),
+                    ),
 
                   // Side tabs
                   if (sides.length > 1 && _sideTabController != null) ...[
@@ -1238,7 +1389,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                   // Selected side label
                   if (sides.isNotEmpty)
                     _buildGeneratedLabelCard(
-                      sides[_selectedSideIndex] as Map<String, dynamic>,
+                      selectedSide,
                       brandDna as Map<String, dynamic>,
                       theme,
                     ),
@@ -1247,6 +1398,21 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          final svg = selectedSide['svg_code']?.toString() ?? '';
+                          final productSlug = _productNameController.text.trim().replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
+                          final sideSlug = (selectedSide['side_name']?.toString() ?? 'side').replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '-');
+                          final saved = await saveSvgDraft('${productSlug}_$sideSlug.svg', svg);
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(saved ? 'SVG draft downloaded.' : 'SVG download is available in the web app.'),
+                          ));
+                        },
+                        icon: const Icon(Icons.download),
+                        label: const Text('Download SVG'),
+                      ),
+                      const SizedBox(width: 8),
                       TextButton.icon(
                         onPressed: _resetForm,
                         icon: Icon(Icons.refresh, color: textMuted),

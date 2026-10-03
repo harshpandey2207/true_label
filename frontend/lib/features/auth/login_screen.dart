@@ -58,9 +58,9 @@ class LoginScreen extends StatelessWidget {
                   style: theme.textTheme.headlineLarge?.copyWith(fontWeight: FontWeight.bold, letterSpacing: 4.0),               
                 ),               
                 SizedBox(height: 8),               
-                Text('Legal Metrology Compliance System', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey)),               
+                Text('Package label screening and label draft prototype', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey)),
                 SizedBox(height: 60),               
-                Text('Login As', style: theme.textTheme.titleLarge),               
+                Text('Open demo workspace as', style: theme.textTheme.titleLarge),
                 SizedBox(height: 24),                              
                 Wrap(                 
                   alignment: WrapAlignment.center,

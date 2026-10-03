@@ -126,19 +126,20 @@ class _OverviewScreen extends StatelessWidget {
     final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
     double compliancePercentage = (totalCompliant / totalScans) * 100;
     double violationPercentage = 100 - compliancePercentage;
-    int fineCollected = totalViolations * 2000; 
 
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Temporal Analysis & Heatmap', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+          Text('Sample Metrics & Heatmap', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('Static demonstration data; not live government records or enforcement metrics.', style: TextStyle(color: textMuted)),
           SizedBox(height: 20),
           
           _buildStatCard(
             title: 'Total Scans Recorded',
             value: totalScans.toString(),
-            subtitle: 'Synced across all districts',
+            subtitle: 'Static sample value',
             icon: Icons.qr_code_scanner,
             color: Colors.blueAccent,
             theme: theme,
@@ -156,7 +157,7 @@ class _OverviewScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Compliance Ratio', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 14)),
+                      Text('Sample screening counts', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 14)),
                       SizedBox(height: 6),
                       Text('$totalCompliant Compliant', style: TextStyle(color: Colors.greenAccent, fontSize: 13, fontWeight: FontWeight.bold)),
                       SizedBox(height: 4),
@@ -193,9 +194,9 @@ class _OverviewScreen extends StatelessWidget {
           SizedBox(height: 12),
 
           _buildStatCard(
-            title: 'Total Fines Collected',
-            value: '₹$fineCollected',
-            subtitle: 'Matched to active infractions',
+            title: 'Penalty estimate',
+            value: 'Not calculated',
+            subtitle: 'The prototype has no penalty calculation or payment service',
             icon: Icons.account_balance_wallet,
             color: Colors.orangeAccent,
             theme: theme,
@@ -756,7 +757,9 @@ class _PendingViolationsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Pending Action Required (Violations Queue)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Text('Sample Violations Queue', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        Text('These rows are sample data; no notice or case action is connected.', style: TextStyle(color: textMuted)),
         SizedBox(height: 24),
         Expanded(
           child: ListView.builder(
@@ -787,7 +790,7 @@ class _PendingViolationsScreen extends StatelessWidget {
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, padding: const EdgeInsets.symmetric(vertical: 14)),
                           onPressed: () => _showNoticeDialog(context, violation['product']),
                           icon: Icon(Icons.send, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-                          label: Text('Confirm & Issue E-Notice', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+                          label: Text('Preview notice workflow (demo)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
                         ),
                       ),
                       SizedBox(height: 12),
@@ -795,10 +798,8 @@ class _PendingViolationsScreen extends StatelessWidget {
                         width: double.infinity,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(side: BorderSide(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87), padding: const EdgeInsets.symmetric(vertical: 14)),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Violation dismissed successfully.'), backgroundColor: Colors.grey));
-                          },
-                          child: Text('Dismiss', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+                          onPressed: null,
+                          child: Text('Case actions are not connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
                         ),
                       ),
                     ],
@@ -814,62 +815,23 @@ class _PendingViolationsScreen extends StatelessWidget {
 
   void _showNoticeDialog(BuildContext context, String product) {
     final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
     final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    bool sendSms = true;
-    bool sendApp = true;
     showDialog(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              backgroundColor: theme.dialogBackgroundColor,
-              title: Text('Issue E-Notice: $product', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.phone, color: Colors.green),
-                      title: Text('+91 98765 43210', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
-                      subtitle: Text('Registered Phone Number Available', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-                    ),
-                    Divider(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87),
-                    SizedBox(height: 16),
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Send via SMS', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                      value: sendSms,
-                      activeColor: Colors.blueAccent,
-                      onChanged: (v) => setState(() => sendSms = v!),
-                    ),
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text('Send via App Push', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                      value: sendApp,
-                      activeColor: Colors.blueAccent,
-                      onChanged: (v) => setState(() => sendApp = v!),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87))),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-                  onPressed: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Notices dispatched across available channels!'), backgroundColor: Colors.green));
-                  },
-                  child: Text('Dispatch E-Notice', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (context) => AlertDialog(
+        backgroundColor: theme.dialogBackgroundColor,
+        title: Text('Notice workflow demo', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+        content: Text(
+          'This sample case is for $product. The app is not connected to a regulator or messaging service, so no notice can be issued or sent.',
+          style: TextStyle(color: textMuted),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Close', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -882,94 +844,34 @@ class _RulesScreen extends StatefulWidget {
 class __RulesScreenState extends State<_RulesScreen> {
   final List<Map<String, String>> _rulesList = [
     {
-      'code': 'Rule 2',
-      'title': 'Definitions',
-      'description': 'Provides definitions for standard terms such as "Retail Package", "Wholesale Package", "Principal Display Panel", and "Multi-piece package".',
-      'penalty': 'Informational'
+      'code': 'Example 1',
+      'title': 'Package identity',
+      'description': 'Prototype OCR check for manufacturer, packer or importer details and the product name. Exact wording and applicability need current rule review.',
+      'penalty': 'Not evaluated'
     },
     {
-      'code': 'Rule 3',
-      'title': 'Applicability',
-      'description': 'States that the provisions apply to packages intended for retail sale. Exempts packages weighing more than 25 kg or 25 litres, and packages destined for industrial/institutional consumers.',
-      'penalty': 'Informational'
+      'code': 'Example 2',
+      'title': 'Quantity and price declarations',
+      'description': 'Prototype OCR looks for a net quantity and retail price. Unit sale price and exemptions depend on package details that this demo does not evaluate.',
+      'penalty': 'Not evaluated'
     },
     {
-      'code': 'Rule 4',
-      'title': 'Regulation for Pre-packing and Sale',
-      'description': 'No person shall pre-pack or cause or permit to be pre-packed any commodity for sale, distribution or delivery unless the package bears the mandatory declarations.',
-      'penalty': 'Up to 5,000 INR'
+      'code': 'Example 3',
+      'title': 'Dates and batch information',
+      'description': 'Prototype OCR looks for date and batch text. Which declarations apply varies by product and sector-specific requirements.',
+      'penalty': 'Not evaluated'
     },
     {
-      'code': 'Rule 5',
-      'title': 'Specific Commodities Standard Packages',
-      'description': 'Certain commodities like infant milk food, biscuits, and bottled water must be packed only in specified standard quantities.',
-      'penalty': '2,000 to 5,000 INR'
+      'code': 'Example 4',
+      'title': 'Consumer contact details',
+      'description': 'Prototype OCR looks for consumer-care contact text. OCR output does not confirm that the details are complete or usable.',
+      'penalty': 'Not evaluated'
     },
     {
-      'code': 'Rule 6',
-      'title': 'Declarations on Every Package',
-      'description': 'Every pre-packaged commodity must declare the MRP, Net Quantity, Manufacturer details, Date of Manufacture, and Consumer Care details.',
-      'penalty': '2,000 to 5,000 INR'
-    },
-    {
-      'code': 'Rule 7', 
-      'title': 'Principal Display Panel & Dimensions',
-      'description': 'Net quantity and retail price declarations must meet minimum millimeter height specifications based on the principal display panel area.',
-      'penalty': '1,000 to 3,000 INR'
-    },
-    {
-      'code': 'Rule 9',
-      'title': 'Manner of Declarations (Legibility)',
-      'description': 'Every declaration shall be legible, prominent, definite, plain, and unambiguous, and must be strictly in Hindi or English.',
-      'penalty': 'Up to 5,000 INR'
-    },
-    {
-      'code': 'Rule 10',
-      'title': 'Declaration of Manufacturer Identity',
-      'description': 'The full name and address of the manufacturer, or the packer if different from the manufacturer, must be clearly stated on the label.',
-      'penalty': '1,000 to 5,000 INR'
-    },
-    {
-      'code': 'Rule 12',
-      'title': 'Declaration of Net Quantity',
-      'description': 'The net quantity shall be expressed in terms of standard metric units of weight, measure, or number (e.g., kg, g, L, ml).',
-      'penalty': '2,000 to 5,000 INR'
-    },
-    {
-      'code': 'Rule 13',
-      'title': 'Statement of Units',
-      'description': 'Specifies the correct symbols for standard units (e.g., "g" for gram, "kg" for kilogram) and forbids the use of pluralized symbols (e.g., "kgs").',
-      'penalty': 'Up to 2,000 INR'
-    },
-    {
-      'code': 'Rule 18',
-      'title': 'Wholesale Package Provisions',
-      'description': 'Every wholesale package must visibly bear the name and address of the manufacturer or importer and the identity/quantity of the commodity.',
-      'penalty': 'Up to 5,000 INR'
-    },
-    {
-      'code': 'Rule 19',
-      'title': 'Imported Packages',
-      'description': 'Imported packages must bear the name and address of the importer, the country of origin, and all standard Rule 6 declarations.',
-      'penalty': 'Up to 5,000 INR'
-    },
-    {
-      'code': 'Rule 24',
-      'title': 'Declaration of Retail Price (MRP)',
-      'description': 'The maximum retail price inclusive of all taxes must be clearly stated. The price cannot be altered or overwritten at the retail level.',
-      'penalty': '2,000 to 5,000 INR'
-    },
-    {
-      'code': 'Rule 26',
-      'title': 'Exemption in Respect of Certain Packages',
-      'description': 'Exempts very small packages (net weight under 10g/10ml) from certain declarations like manufacturing date, except for food and drugs.',
-      'penalty': 'Informational'
-    },
-    {
-      'code': 'Rule 32',
-      'title': 'General Penalty for Contravention',
-      'description': 'Whoever contravenes any provisions of these rules for which no specific penalty is provided shall be punished with a fine.',
-      'penalty': 'Up to 5,000 INR'
+      'code': 'Example 5',
+      'title': 'Category-specific information',
+      'description': 'Food, cosmetics, medical devices and other products may have separate declarations. This small prototype catalogue is not a complete ruleset.',
+      'penalty': 'Not evaluated'
     },
   ];
 
@@ -987,18 +889,18 @@ class __RulesScreenState extends State<_RulesScreen> {
       builder: (context) {
         return AlertDialog(
           backgroundColor: theme.dialogBackgroundColor,
-          title: Text('Add New Compliance Rule', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+          title: Text('Add Demo Catalogue Entry', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: codeController, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black), decoration: const InputDecoration(labelText: 'Rule Code', labelStyle: TextStyle(color: Colors.blueAccent))),
+                TextField(controller: codeController, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black), decoration: const InputDecoration(labelText: 'Example ID', labelStyle: TextStyle(color: Colors.blueAccent))),
                 SizedBox(height: 12),
-                TextField(controller: titleController, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black), decoration: const InputDecoration(labelText: 'Rule Title', labelStyle: TextStyle(color: Colors.blueAccent))),
+                TextField(controller: titleController, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black), decoration: const InputDecoration(labelText: 'Example title', labelStyle: TextStyle(color: Colors.blueAccent))),
                 SizedBox(height: 12),
                 TextField(controller: descController, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black), decoration: const InputDecoration(labelText: 'Description', labelStyle: TextStyle(color: Colors.blueAccent))),
                 SizedBox(height: 12),
-                TextField(controller: penaltyController, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black), decoration: const InputDecoration(labelText: 'Fine / Penalty Range', labelStyle: TextStyle(color: Colors.blueAccent))),
+                TextField(controller: penaltyController, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black), decoration: const InputDecoration(labelText: 'Example note (not a verified penalty)', labelStyle: TextStyle(color: Colors.blueAccent))),
               ],
             ),
           ),
@@ -1013,14 +915,14 @@ class __RulesScreenState extends State<_RulesScreen> {
                       'code': codeController.text,
                       'title': titleController.text,
                       'description': descController.text,
-                      'penalty': penaltyController.text.isEmpty ? '1,000 INR' : penaltyController.text,
+                      'penalty': penaltyController.text.isEmpty ? 'Not specified' : penaltyController.text,
                     });
                   });
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('New rule successfully added!'), backgroundColor: Colors.green));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Added to this screen only. It was not saved to the backend.'), backgroundColor: Colors.blueGrey));
                 }
               },
-              child: Text('Save Rule', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+              child: Text('Add demo entry', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
             ),
           ],
         );
@@ -1042,15 +944,17 @@ class __RulesScreenState extends State<_RulesScreen> {
           spacing: 12,
           runSpacing: 12,
           children: [
-            Text('Compliance Rules Management', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
+            Text('Prototype Rule Catalogue', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 22, fontWeight: FontWeight.bold)),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
               onPressed: () => _showAddRuleDialog(context),
               icon: Icon(Icons.add, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-              label: Text('Add Rule', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
+              label: Text('Add Demo Entry', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        Text('Example data only. Entries are not verified against current law and changes are not saved to the backend.', style: TextStyle(color: textMuted)),
         SizedBox(height: 20),
         Expanded(
           child: ListView.builder(
@@ -1071,7 +975,7 @@ class __RulesScreenState extends State<_RulesScreen> {
                         runSpacing: 4,
                         children: [
                           Text(rule['code']!, style: TextStyle(color: Colors.blueAccent, fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text('Fine: ${rule['penalty']}', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.w500)),
+                          Text('Demo note: ${rule['penalty']}', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.w500)),
                         ],
                       ),
                       SizedBox(height: 8),
@@ -1099,7 +1003,7 @@ class _ReportRepositoryScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Secure Report Repository', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: isMobile ? 22 : 28, fontWeight: FontWeight.bold)),
+        Text('Sample Report Repository', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: isMobile ? 22 : 28, fontWeight: FontWeight.bold)),
         SizedBox(height: 16),
         Expanded(
           child: Card(
@@ -1149,7 +1053,7 @@ class _ReportRepositoryScreen extends StatelessWidget {
                   ),
                   trailing: IconButton(
                     icon: Icon(Icons.visibility, color: Colors.blueAccent),
-                    onPressed: () => ReportViewer.showPdfDialog(context: context, reportId: v['id'], product: v['product'], violation: v['violation']),
+                    onPressed: () => ReportViewer.showPdfDialog(context: context, reportId: v['id'], product: v['product'], findingsOrNotes: 'Sample: ${v["violation"]}', noFlagsDetected: false),
                     tooltip: 'View PDF Report',
                   ),
                 );
@@ -1172,9 +1076,11 @@ class _AuditLogsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('System Audit Logs & Activity Trail', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Text('Sample Audit Log', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        Text('Static demo activity; no user account, enforcement record or system event is connected.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
         SizedBox(height: 8),
-        Text('Immutable ledger tracking login events and inspector scans with exact date & time.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+        Text('Static demonstration log; this screen is not connected to authentication or an audit ledger.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
         SizedBox(height: 24),
         Expanded(
           child: Card(
@@ -1220,9 +1126,9 @@ class _ProfileScreen extends StatelessWidget {
                 child: Icon(Icons.admin_panel_settings, size: 60, color: theme.brightness == Brightness.dark ? Colors.blueAccent : Colors.blue.shade800),
             ),
             SizedBox(height: 24),
-            Text('Harsh Pandey', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Sample Administrator Profile', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
             SizedBox(height: 8),
-            Text('Chief Metrology Administrator', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey)),
+            Text('Demo only • no authentication is connected', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey)),
             SizedBox(height: 32),
             Card(
               color: theme.cardColor,
@@ -1231,13 +1137,13 @@ class _ProfileScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   children: [
-                    _buildProfileItem(Icons.email, 'Email', 'harsh.pandey@truelabel.gov.in', theme),
+                    _buildProfileItem(Icons.email, 'Email', 'Not connected', theme),
                     Divider(height: 32),
-                    _buildProfileItem(Icons.phone, 'Phone', '+91 98765 43210', theme),
+                    _buildProfileItem(Icons.phone, 'Phone', 'Not connected', theme),
                     Divider(height: 32),
-                    _buildProfileItem(Icons.location_on, 'Jurisdiction', 'National Headquarters, New Delhi', theme),
+                    _buildProfileItem(Icons.location_on, 'Jurisdiction', 'Sample only', theme),
                     Divider(height: 32),
-                    _buildProfileItem(Icons.security, 'Access Level', 'Tier-1 Root Administrator', theme),
+                    _buildProfileItem(Icons.security, 'Access Level', 'Not authenticated', theme),
                   ],
                 ),
               ),
@@ -1249,9 +1155,9 @@ class _ProfileScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
               ),
-              onPressed: () {},
+              onPressed: null,
               icon: Icon(Icons.edit, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-              label: Text('Edit Profile', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16)),
+              label: Text('Profile editing not connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16)),
             ),
           ],
         ),

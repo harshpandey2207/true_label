@@ -1,22 +1,34 @@
 from sqlalchemy.orm import Session
 from backend.app.db.database import engine, Base
-from backend.app.db.models import ProductCategory, ComplianceRule, ScanHistory, SectoralOverride, ExemptionClause
+from backend.app.db.models import ProductCategory, ComplianceRule
 
 def init_db(db: Session):
-    # Drop and recreate to ensure the 3-Tier Architecture is applied
-    Base.metadata.drop_all(bind=engine)
+    # Create missing tables without deleting scan history or existing records.
     Base.metadata.create_all(bind=engine)
-    
-    # --- Seed Product Categories ---
-    cat_general = ProductCategory(name="General Packaged Commodity", description="Standard consumer goods (Rule 6)")
-    cat_food = ProductCategory(name="Food & Beverages", description="Edible goods (Legal Metrology + FSSAI Act)")
-    cat_electronics = ProductCategory(name="Electronics & Appliances", description="Electronic devices (Legal Metrology + BIS/E-Waste)")
-    cat_cosmetics = ProductCategory(name="Cosmetics, Ointments & Pharma Goods", description="Personal care items (Drugs & Cosmetics Act + Metrology)")
-    cat_textiles = ProductCategory(name="Apparel & Textiles", description="Clothing and garments")
-    cat_medical = ProductCategory(name="Medical Devices", description="Medical Devices (MDR 2017 + Legal Metrology)")
 
-    db.add_all([cat_general, cat_food, cat_electronics, cat_cosmetics, cat_textiles, cat_medical])
+    category_descriptions = {
+        "General Packaged Commodity": "Standard consumer goods",
+        "Food & Beverages": "Food and beverages",
+        "Electronics & Appliances": "Electronic devices and appliances",
+        "Cosmetics, Ointments & Pharma Goods": "Cosmetics and pharmaceutical goods",
+        "Apparel & Textiles": "Clothing and textile products",
+        "Medical Devices": "Medical devices",
+    }
+    categories = {}
+    for name, description in category_descriptions.items():
+        category = db.query(ProductCategory).filter(ProductCategory.name == name).first()
+        if category is None:
+            category = ProductCategory(name=name, description=description)
+            db.add(category)
+        categories[name] = category
     db.commit()
+
+    cat_general = categories["General Packaged Commodity"]
+    cat_food = categories["Food & Beverages"]
+    cat_electronics = categories["Electronics & Appliances"]
+    cat_cosmetics = categories["Cosmetics, Ointments & Pharma Goods"]
+    cat_textiles = categories["Apparel & Textiles"]
+    cat_medical = categories["Medical Devices"]
 
     rules = []
     
@@ -24,88 +36,43 @@ def init_db(db: Session):
     for cat in [cat_general, cat_food, cat_electronics, cat_cosmetics, cat_textiles, cat_medical]:
         rules.extend([
             ComplianceRule(category_id=cat.id, tag="MANUFACTURER", is_mandatory=True, legal_act_reference="Legal Metrology PCR, 2011 - Rule 6(1)(a)"),
-            ComplianceRule(category_id=cat.id, tag="NET_QUANTITY", is_mandatory=True, legal_act_reference="Legal Metrology PCR, 2011 - Rule 6(1)(b)"),
-            ComplianceRule(category_id=cat.id, tag="MANUFACTURING_DATE", is_mandatory=True, legal_act_reference="Legal Metrology PCR, 2011 - Rule 6(1)(d)"),
-            ComplianceRule(category_id=cat.id, tag="MRP", is_mandatory=True, legal_act_reference="Legal Metrology PCR, 2011 - Rule 6(1)(e)"),
-            ComplianceRule(category_id=cat.id, tag="CONSUMER_CARE", is_mandatory=True, legal_act_reference="Legal Metrology PCR, 2011 - Rule 6(1)(g)"),
-            ComplianceRule(category_id=cat.id, tag="UNIT_SALE_PRICE", is_mandatory=True, legal_act_reference="Legal Metrology PCR, 2011 - Rule 6(1)(e) (2021 Amendment)"),
-            ComplianceRule(category_id=cat.id, tag="LANGUAGE_CHECK", is_mandatory=True, legal_act_reference="Legal Metrology PCR, 2011 - Rule 4 (Hindi in Devanagari or English)"),
+            ComplianceRule(category_id=cat.id, tag="NET_QUANTITY", is_mandatory=True, legal_act_reference="Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(1)(c)"),
+            ComplianceRule(category_id=cat.id, tag="MANUFACTURING_DATE", is_mandatory=True, legal_act_reference="Rule 6(1)(d), subject to product-specific provisions and exceptions"),
+            ComplianceRule(category_id=cat.id, tag="MRP", is_mandatory=True, legal_act_reference="Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(1)(f)"),
+            ComplianceRule(category_id=cat.id, tag="CONSUMER_CARE", is_mandatory=True, legal_act_reference="Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(2)"),
+            # Applicability depends on package type and declared quantity; the
+            # current prototype does not evaluate those conditions.
+            ComplianceRule(category_id=cat.id, tag="UNIT_SALE_PRICE", is_mandatory=False, legal_act_reference="Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(11), check applicability"),
+            ComplianceRule(category_id=cat.id, tag="LANGUAGE_CHECK", is_mandatory=True, legal_act_reference="Applicable declaration-language requirements; verify sector-specific rules"),
         ])
 
     # Specific Additions: Food & Beverages
     rules.extend([
-        ComplianceRule(category_id=cat_food.id, tag="FSSAI_LICENSE", is_mandatory=True, legal_act_reference="FSSAI Regulations, 2011 - License Number"),
-        ComplianceRule(category_id=cat_food.id, tag="BEST_BEFORE_DATE", is_mandatory=True, legal_act_reference="FSSAI Regulations - Best Before/Expiry"),
-        ComplianceRule(category_id=cat_food.id, tag="VEG_NON_VEG_LOGO", is_mandatory=True, legal_act_reference="FSSAI Regulations - Veg/Non-Veg Logo"),
+        ComplianceRule(category_id=cat_food.id, tag="FSSAI_LICENSE", is_mandatory=True, legal_act_reference="Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended"),
+        ComplianceRule(category_id=cat_food.id, tag="BEST_BEFORE_DATE", is_mandatory=True, legal_act_reference="Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended"),
+        ComplianceRule(category_id=cat_food.id, tag="VEG_NON_VEG_LOGO", is_mandatory=True, legal_act_reference="Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended"),
     ])
 
     # Specific Additions: Electronics
     rules.extend([
-        ComplianceRule(category_id=cat_electronics.id, tag="BIS_MARK", is_mandatory=True, legal_act_reference="BIS Act, 2016"),
+        ComplianceRule(category_id=cat_electronics.id, tag="BIS_MARK", is_mandatory=False, legal_act_reference="Applicable BIS / quality-control requirements, if the product is covered"),
     ])
     
     # Specific Additions: Cosmetics
     rules.extend([
-        ComplianceRule(category_id=cat_cosmetics.id, tag="BATCH_CODE", is_mandatory=True, legal_act_reference="Drugs & Cosmetics Rules, 1945 - Rule 148"),
+        ComplianceRule(category_id=cat_cosmetics.id, tag="BATCH_CODE", is_mandatory=True, legal_act_reference="Drugs and Cosmetics Rules, 1945, and product-specific requirements"),
     ])
 
-    db.add_all(rules)
-    db.commit()
-
-    # --- TIER 2: SECTORAL OVERRIDES ---
-    overrides = []
-    
-    # Medical Devices Exemption from Rule 7 (Font Size)
-    for rule in db.query(ComplianceRule).filter(ComplianceRule.category_id == cat_medical.id).all():
-        overrides.append(
-            SectoralOverride(
-                rule_id=rule.id,
-                override_condition="IS_MEDICAL_DEVICE",
-                override_action="DISABLE_RULE_7_FONT_SIZE",
-                statutory_reference="Medical Devices Rules, 2017 (Oct 2025 Amendment carve-out)"
-            )
-        )
-    
-    # FSSAI Supremacy over Best Before Date
-    bb_rule = db.query(ComplianceRule).filter(ComplianceRule.tag == "BEST_BEFORE_DATE", ComplianceRule.category_id == cat_food.id).first()
-    if bb_rule:
-        overrides.append(
-            SectoralOverride(
-                rule_id=bb_rule.id,
-                override_condition="IS_FOOD_PRODUCT",
-                override_action="FSSAI_SUPERCEDES_METROLOGY_SHELF_LIFE",
-                statutory_reference="FSSAI Regulations vs Legal Metrology Rule 6(1)"
-            )
-        )
-
-    db.add_all(overrides)
-    db.commit()
-
-    # --- TIER 3: EXEMPTIONS (Rule 32 / Rule 33 / Institutional) ---
-    exemptions = []
-    
-    # MRP Exemption for Institutional/Industrial Consumers (Rule 2(bb) & 2(bc))
-    for mrp_rule in db.query(ComplianceRule).filter(ComplianceRule.tag == "MRP").all():
-        exemptions.extend([
-            ExemptionClause(
-                rule_id=mrp_rule.id,
-                exemption_condition="IS_INSTITUTIONAL_CONSUMER",
-                alternative_requirement="NOT_FOR_RETAIL_SALE_TAG_REQUIRED",
-                statutory_reference="Legal Metrology PCR, 2011 - Rule 2(bb) & 2(bc)"
-            ),
-            ExemptionClause(
-                rule_id=mrp_rule.id,
-                exemption_condition="WEIGHT_UNDER_10G_AND_NOT_TOBACCO",
-                alternative_requirement="NONE",
-                statutory_reference="Legal Metrology PCR, 2011 - Rule 32"
-            ),
-            ExemptionClause(
-                rule_id=mrp_rule.id,
-                exemption_condition="RULE_33_GST_EMERGENCY_ACTIVE",
-                alternative_requirement="ALLOW_DUAL_MRP_STICKER",
-                statutory_reference="Legal Metrology PCR, 2011 - Rule 33 (e.g. Sept 2025 GST rate revision)"
-            )
-        ])
-    
-    db.add_all(exemptions)
+    # Seed/update only the known starter rows. Existing scans and unrelated
+    # records are preserved; no broad table reset runs during application boot.
+    for rule in rules:
+        current = db.query(ComplianceRule).filter(
+            ComplianceRule.category_id == rule.category_id,
+            ComplianceRule.tag == rule.tag,
+        ).first()
+        if current is None:
+            db.add(rule)
+        else:
+            current.is_mandatory = rule.is_mandatory
+            current.legal_act_reference = rule.legal_act_reference
     db.commit()

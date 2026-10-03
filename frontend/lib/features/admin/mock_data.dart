@@ -60,8 +60,8 @@ final List<Map<String, dynamic>> mockViolations = List.generate(totalViolations,
       "product": "AquaPure 1L", 
       "inspector": "Harsh P.", 
       "violation": violationTypes[1], // Rule 6
-      "status": "Pending Review", 
-      "date": "Oct 16, 2026"
+      "status": "Demo: Pending Review",
+      "date": "Sample"
     };
   }
   if (index == 1) {
@@ -70,8 +70,8 @@ final List<Map<String, dynamic>> mockViolations = List.generate(totalViolations,
       "product": "GlowCream 50g", 
       "inspector": "Rohan M.", 
       "violation": violationTypes[2], // Rule 7
-      "status": "Notice Sent", 
-      "date": "Oct 16, 2026"
+      "status": "Demo: No notice sent",
+      "date": "Sample"
     };
   }
   
@@ -80,21 +80,21 @@ final List<Map<String, dynamic>> mockViolations = List.generate(totalViolations,
     "product": index % 2 == 0 ? "Textile Goods Batch $index" : "Agri Seeds 5kg",
     "inspector": index % 3 == 0 ? "Harsh P." : "Rohan M.",
     "violation": violationTypes[index % violationTypes.length],
-    "status": "Notice Sent",
-    "date": "Oct 15, 2026"
+    "status": "Demo: No notice sent",
+    "date": "Sample"
   };
 });
 
 // Generates exactly audit logs to match the total scans
 final List<Map<String, String>> auditLogs = List.generate(totalScans, (index) {
-  if (index == 0) return {'action': 'Inspector Login: Harsh P. (ID: INS-402)', 'timestamp': 'Oct 16, 2026 - 09:14 AM', 'type': 'Authentication', 'status': 'Success'};
-  if (index == 1) return {'action': 'Product Scan Performed: AquaPure 1L', 'timestamp': 'Oct 16, 2026 - 10:32 AM', 'type': 'Field Scan', 'status': 'Flagged'};
-  if (index == 2) return {'action': 'Inspector Login: Rohan M. (ID: INS-405)', 'timestamp': 'Oct 16, 2026 - 11:05 AM', 'type': 'Authentication', 'status': 'Success'};
+  if (index == 0) return {'action': 'Sample inspector login (demo only)', 'timestamp': 'Sample', 'type': 'Authentication', 'status': 'Demo'};
+  if (index == 1) return {'action': 'Sample product scan: AquaPure 1L', 'timestamp': 'Sample', 'type': 'Field Scan', 'status': 'Demo: flagged'};
+  if (index == 2) return {'action': 'Sample inspector login (demo only)', 'timestamp': 'Sample', 'type': 'Authentication', 'status': 'Demo'};
   
   bool isViolation = index < totalViolations + 3;
   return {
     'action': 'Product Scan Performed: SKU-${1000 + index}', 
-    'timestamp': 'Oct 15, 2026', 
+    'timestamp': 'Sample',
     'type': 'Field Scan', 
     'status': isViolation ? 'Flagged' : 'Success'
   };

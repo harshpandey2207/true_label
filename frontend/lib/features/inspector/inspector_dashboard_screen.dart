@@ -58,7 +58,7 @@ class InspectorDashboard extends StatelessWidget {
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: theme.cardColor,
-        title: Text('AR Inspector', style: theme.textTheme.titleLarge),
+        title: Text('Package Label Inspector', style: theme.textTheme.titleLarge),
         iconTheme: theme.iconTheme,
         automaticallyImplyLeading: isMobile,
         actions: [
@@ -127,7 +127,7 @@ class _ScannerScreen extends StatefulWidget {
 
 class __ScannerScreenState extends State<_ScannerScreen> {
   int _scanState = 0; 
-  String _processingText = "Initializing AR Camera...";
+  String _processingText = "Preparing local OCR...";
   String _selectedCategory = 'General Packaged Commodity';
   
   final List<XFile> _capturedImages = []; 
@@ -141,31 +141,44 @@ class __ScannerScreenState extends State<_ScannerScreen> {
     'Electronics & Appliances',
     'Cosmetics, Ointments & Pharma Goods',
     'Apparel & Textiles',
+    'Medical Devices',
   ];
 
   Future<void> _pickCameraImage() async {
+    if (_capturedImages.length >= 6) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A scan can include up to six package-side images.')));
+      return;
+    }
     final XFile? photo = await _picker.pickImage(
       source: ImageSource.camera,
       imageQuality: 70, 
       maxWidth: 1200,   
       maxHeight: 1200,
     );
-    if (photo == null) return;
+    if (!mounted || photo == null) return;
     setState(() {
       _capturedImages.add(photo);
     });
   }
 
   Future<void> _pickMultipleGalleryImages() async {
+    final remaining = 6 - _capturedImages.length;
+    if (remaining <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('A scan can include up to six package-side images.')));
+      return;
+    }
     final List<XFile> photos = await _picker.pickMultiImage(
       imageQuality: 70,
       maxWidth: 1200,
       maxHeight: 1200,
     );
-    if (photos.isNotEmpty) {
+    if (mounted && photos.isNotEmpty) {
       setState(() {
-        _capturedImages.addAll(photos);
+        _capturedImages.addAll(photos.take(remaining));
       });
+      if (photos.length > remaining) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This scan supports six images. Extra selections were skipped.')));
+      }
     }
   }
 
@@ -182,13 +195,13 @@ class __ScannerScreenState extends State<_ScannerScreen> {
         imageFiles: _capturedImages,
         distanceMm: 300.0,
         focalLengthPx: 800.0,
-        categoryId: _productCategories.indexOf(_selectedCategory) + 1,
+        categoryName: _selectedCategory,
       );
 
       if (result != null && result['status'] == 'SUCCESS') {
         setState(() {
           _analysisResults = result['results'];
-          _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'COMPLIANT');
+          _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'NO_FLAGS');
           _scanState = 2;
         });
       } else {
@@ -226,7 +239,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('AR Metrology Scanner', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Package Label Scanner', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
         SizedBox(height: 12),
         Container(
           padding: EdgeInsets.all(12),
@@ -242,7 +255,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Demo Notice: True Label utilizes PaddleOCR (open-source) in production. To bypass free-tier CPU constraints and ensure fast 3-second evaluation for judges, this live web demo temporarily routes inference through a lightweight cloud API.',
+                  'Images are processed by PaddleOCR on the configured API server. Text-size values use fixed, uncalibrated camera geometry and are only estimates. OCR and the prototype rule set can miss context; review the package and current requirements before relying on a result.',
                   style: TextStyle(color: textMuted, fontSize: 12, height: 1.4),
                 ),
               ),
@@ -399,17 +412,11 @@ class __ScannerScreenState extends State<_ScannerScreen> {
   Widget _buildResultState(BuildContext context, ThemeData theme) {
     final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
     final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    Set<String> foundTags = {};
-    for (var resultData in _analysisResults!) {
-      final analysis = resultData['analysis'];
-      final List<dynamic> declarations = analysis['declarations'] ?? [];
-      for (var d in declarations) {
-        if (d['tag'] != 'GENERAL') foundTags.add(d['tag'].toString().toUpperCase());
-      }
-    }
-
-    final List<String> mandatoryTags = ['MRP', 'NET_QUANTITY', 'MANUFACTURER', 'MANUFACTURING_DATE', 'BATCH_CODE'];
-    final List<String> missingTags = mandatoryTags.where((tag) => !foundTags.contains(tag)).toList();
+    final missingTags = <String>{
+      for (final resultData in _analysisResults!)
+        for (final tag in ((resultData['analysis'] as Map<String, dynamic>?)?['missing_tags'] as List? ?? const []))
+          tag.toString(),
+    }.toList()..sort();
     
     if (missingTags.isNotEmpty) _overallCompliance = false;
 
@@ -423,7 +430,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
             child: Column(
               children: [
                 Text(
-                  _overallCompliance ? 'FULLY COMPLIANT' : 'NON-COMPLIANT',
+                  _overallCompliance ? 'NO ISSUES DETECTED IN SCREENING' : 'POTENTIAL LABEL ISSUES',
                   style: TextStyle(
                     color: _overallCompliance ? Colors.green : Colors.red,
                     fontSize: 18, fontWeight: FontWeight.bold
@@ -445,12 +452,30 @@ class __ScannerScreenState extends State<_ScannerScreen> {
                         for (var img in _capturedImages) {
                           proofBytes.add(await img.readAsBytes());
                         }
+                        final reportNotes = <String>{...missingTags};
+                        for (final resultData in _analysisResults!) {
+                          final analysis = resultData['analysis'] as Map<String, dynamic>? ?? {};
+                          for (final rawDeclaration in (analysis['declarations'] as List? ?? const <dynamic>[])) {
+                            final declaration = rawDeclaration as Map;
+                            if (declaration['is_compliant'] == false) {
+                              final tag = declaration['tag']?.toString() ?? 'Declaration';
+                              final note = declaration['failure_reason']?.toString() ??
+                                  declaration['message']?.toString() ??
+                                  'Needs review';
+                              reportNotes.add('$tag: $note');
+                            }
+                          }
+                          for (final warning in (analysis['warnings'] as List? ?? const <dynamic>[])) {
+                            reportNotes.add(warning.toString());
+                          }
+                        }
                         if (context.mounted) {
                           ReportViewer.showPdfDialog(
                             context: context, 
                             reportId: 'RPT-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}', 
                             product: _selectedCategory, 
-                            violation: missingTags.isNotEmpty ? missingTags.join(', ') : 'None',
+                            findingsOrNotes: reportNotes.isEmpty ? 'No flags in the selected prototype checks.' : reportNotes.join('\n'),
+                            noFlagsDetected: _overallCompliance,
                             proofImages: proofBytes,
                           );
                         }
@@ -578,7 +603,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
                                     contentPadding: EdgeInsets.zero,
                                     leading: Icon(Icons.cancel, color: Colors.red),
                                     title: Text(t.toString(), style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    subtitle: Text("Missing mandatory declaration. Zero compliance.", style: TextStyle(color: textMuted, fontSize: 12)),
+                                    subtitle: Text("Not detected in the selected prototype rule set. Verify against the package and applicable rules.", style: TextStyle(color: textMuted, fontSize: 12)),
                                   );
                                 }).toList()),
 ],
@@ -630,7 +655,9 @@ class _InspectorReportsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Reports', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Sample Reports', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 6),
+        Text('These example rows are static demo data. PDF previews are preliminary screening summaries.', style: TextStyle(color: textMuted)),
         SizedBox(height: 16),
         Expanded(
           child: Card(
@@ -647,7 +674,7 @@ class _InspectorReportsScreen extends StatelessWidget {
                     icon: Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
                     tooltip: 'View Report PDF',
                     onPressed: () {
-                      ReportViewer.showPdfDialog(context: context, reportId: violation['id'], product: violation['product'], violation: violation['violation']);
+                      ReportViewer.showPdfDialog(context: context, reportId: violation['id'], product: violation['product'], findingsOrNotes: 'Sample: ${violation["violation"]}', noFlagsDetected: false);
                     },
                   ),
                 );
@@ -672,6 +699,8 @@ class _InspectorAnalyticsScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Analytics', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+        Text('Static demo charts; no inspection history is connected.', style: TextStyle(color: textMuted)),
           SizedBox(height: 16),
           Card(
             color: theme.cardColor,
@@ -741,16 +770,15 @@ class _InspectionHistoryScreen extends StatelessWidget {
     final theme = Theme.of(context);
     final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
     final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    final myHistory = auditLogs.where((log) => 
-      log['action']!.contains('Harsh P.') || 
-      (log['type'] == 'Field Scan' && log.hashCode % 2 == 0)
-    ).toList();
+    final myHistory = auditLogs;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('History', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+        Text('Sample History', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
         SizedBox(height: 16),
+        Text('Static example records; the app is not connected to an authentication or audit service.', style: TextStyle(color: textMuted)),
+        SizedBox(height: 12),
         Expanded(
           child: Card(
             color: theme.cardColor,
@@ -797,9 +825,9 @@ class _ProfileScreen extends StatelessWidget {
               child: Icon(Icons.badge, size: 60, color: theme.brightness == Brightness.dark ? Colors.orangeAccent : Colors.orange.shade800),
             ),
             SizedBox(height: 24),
-            Text('Harsh Pandey', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Sample Inspector Profile', style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
             SizedBox(height: 8),
-            Text('Senior Field Inspector', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey)),
+            Text('Demo only • no authentication is connected', style: theme.textTheme.titleMedium?.copyWith(color: Colors.grey)),
             SizedBox(height: 32),
             Card(
               color: theme.cardColor,
@@ -808,13 +836,13 @@ class _ProfileScreen extends StatelessWidget {
                 padding: const EdgeInsets.all(24.0),
                 child: Column(
                   children: [
-                    _buildProfileItem(Icons.email, 'Email', 'harsh.pandey@inspector.gov.in', theme),
+                    _buildProfileItem(Icons.email, 'Email', 'Sample profile — not a real account', theme),
                     Divider(height: 32),
-                    _buildProfileItem(Icons.phone, 'Phone', '+91 99988 77766', theme),
+                    _buildProfileItem(Icons.phone, 'Phone', 'Not connected', theme),
                     Divider(height: 32),
-                    _buildProfileItem(Icons.badge, 'Inspector ID', 'INS-402', theme),
+                    _buildProfileItem(Icons.badge, 'Inspector ID', 'Sample only', theme),
                     Divider(height: 32),
-                    _buildProfileItem(Icons.verified_user, 'Clearance', 'Level 2 - Regional Auditor', theme),
+                    _buildProfileItem(Icons.verified_user, 'Clearance', 'Not verified', theme),
                   ],
                 ),
               ),
@@ -826,9 +854,9 @@ class _ProfileScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
               ),
-              onPressed: () {},
+              onPressed: null,
               icon: Icon(Icons.edit, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-              label: Text('Update Credentials', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16)),
+              label: Text('Profile editing not connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16)),
             ),
           ],
         ),

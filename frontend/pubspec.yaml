@@ -1,5 +1,5 @@
 name: true_label
-description: Legal Metrology Compliance System
+description: Open-source-first package label screening and draft prototype
 
 environment:
   sdk: '^3.13.0'

@@ -4,7 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
-  static const String defaultUrl = 'https://true-label-backend.onrender.com';
+  static const String defaultUrl = 'http://127.0.0.1:8000';
 
   static String get baseUrl {
     return dotenv.env['API_BASE_URL'] ?? defaultUrl;
@@ -21,14 +21,14 @@ class ApiService {
     required List<XFile> imageFiles, // <--- Accepts a list of images now
     required double distanceMm,
     required double focalLengthPx,
-    required int categoryId,
+    required String categoryName,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/scan/analyze-ar'));
       
       request.fields['distance_mm'] = distanceMm.toString();
       request.fields['focal_length_px'] = focalLengthPx.toString();
-      request.fields['category_id'] = categoryId.toString();
+      request.fields['category_name'] = categoryName;
 
       // Loop through all selected images and append them to the multipart request
       for (var imageFile in imageFiles) {
@@ -47,9 +47,14 @@ class ApiService {
         final respStr = await response.stream.bytesToString();
         return jsonDecode(respStr);
       } else {
+        final respStr = await response.stream.bytesToString();
+        dynamic detail;
+        try {
+          detail = jsonDecode(respStr)['detail'];
+        } catch (_) {}
         return {
           'status': 'ERROR',
-          'error': 'Backend error (${response.statusCode}). Backend may be waking up, please retry in 30 seconds.',
+          'error': detail?.toString() ?? 'Backend error (${response.statusCode}).',
         };
       }
     } catch (e) {
@@ -68,6 +73,8 @@ class ApiService {
     required String dimensions,
     required String customPrompt,
     required Map<String, String> missingTagValues,
+    required String additionalDetails,
+    required int sideCount,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/label/generate'));
@@ -78,6 +85,8 @@ class ApiService {
       request.fields['dimensions'] = dimensions;
       request.fields['custom_prompt'] = customPrompt;
       request.fields['missing_tag_values'] = jsonEncode(missingTagValues);
+      request.fields['additional_details'] = additionalDetails;
+      request.fields['side_count'] = sideCount.toString();
 
       for (var imageFile in imageFiles) {
         var bytes = await imageFile.readAsBytes();
@@ -90,7 +99,14 @@ class ApiService {
       if (response.statusCode == 200) {
         return jsonDecode(respStr);
       } else {
-        return {'success': false, 'error': 'Backend error ${response.statusCode}: $respStr'};
+        dynamic detail;
+        try {
+          detail = jsonDecode(respStr)['detail'];
+        } catch (_) {}
+        return {
+          'success': false,
+          'error': detail?.toString() ?? 'Backend error ${response.statusCode}',
+        };
       }
     } catch (e) {
       return {'success': false, 'error': 'Connection error: $e'};

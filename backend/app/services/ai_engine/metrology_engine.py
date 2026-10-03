@@ -11,22 +11,20 @@ import cv2
 import re
 from typing import Dict, Any
 
-try:
-    from paddleocr import PaddleOCR
-    # PP-OCRv4 mobile models disabled to prevent Render 512MB OOM crash (using OCR.space bypass)
-    # ocr = PaddleOCR(
-    #     ocr_version='PP-OCRv4',
-    #     lang='en',
-    #     use_doc_orientation_classify=False,
-    #     use_doc_unwarping=False,
-    #     use_textline_orientation=False,
-    #     text_det_limit_side_len=500,
-    #     text_det_limit_type='max',
-    # )
-    ocr = None
-except Exception as e:
-    print(f"PaddleOCR disabled due to environment issue: {e}")
-    ocr = None
+_ocr = None
+_ocr_error = None
+
+
+def _get_local_ocr():
+    """Load the open-source OCR engine only when a scan is requested."""
+    global _ocr, _ocr_error
+    if _ocr is None and _ocr_error is None:
+        try:
+            from paddleocr import PaddleOCR
+            _ocr = PaddleOCR(use_angle_cls=False, lang="en", show_log=False)
+        except Exception as exc:
+            _ocr_error = str(exc)
+    return _ocr
 
 OINTMENT_RULES = [
     "mrp",
@@ -74,70 +72,32 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
 
     parsed_lines = []
 
-    # --- FAST DEMO BYPASS: OCR.space API ---
-    # Temporarily routes OCR to a fast cloud API to bypass Render's 0.1 CPU limit (which takes 87s).
-    # Returns bounding boxes in the exact format expected by the AR engine.
-    import requests
+    # Run OCR locally with PaddleOCR. No image is uploaded to a third-party OCR API.
+    local_ocr = _get_local_ocr()
+    if local_ocr is None:
+        return {
+            "status": "ERROR",
+            "declarations": [],
+            "missing_tags": [],
+            "error": f"Local PaddleOCR could not start: {_ocr_error or 'engine unavailable'}",
+        }
+
     try:
-        with open(image_path, 'rb') as f:
-            img_bytes = f.read()
-        res = requests.post(
-            'https://api.ocr.space/parse/image',
-            files={'file': ('image.jpg', img_bytes)},
-            data={
-                'apikey': 'K89006093488957', # Free public key
-                'language': 'eng',
-                'isOverlayRequired': 'true',
-                'OCREngine': '2' # Engine 2 is optimized for numbers/product labels
-            },
-            timeout=30
-        )
-        data = res.json()
-        if data and not data.get('IsErroredOnProcessing'):
-            results = data.get('ParsedResults', [])
-            if results:
-                lines = results[0].get('TextOverlay', {}).get('Lines', [])
-                for line in lines:
-                    text = line.get('LineText', '').strip()
-                    words = line.get('Words', [])
-                    if words and text:
-                        # Construct 4-point bounding box
-                        left = min(w['Left'] for w in words)
-                        top = min(w['Top'] for w in words)
-                        right = max(w['Left'] + w['Width'] for w in words)
-                        bottom = max(w['Top'] + w['Height'] for w in words)
-                        box = [[left, top], [right, top], [right, bottom], [left, bottom]]
-                        parsed_lines.append((box, text, 0.99))
-    except Exception as e:
-        print(f"Bypass API Error: {e}")
-
-    # --- FALLBACK: OPEN-SOURCE PADDLEOCR ---
-    # If the fast API fails, it falls back to the original open-source architecture.
-    if len(parsed_lines) == 0:
-        if hasattr(ocr, 'predict'):
-            try:
-                result = ocr.predict(image_path)
-                if result and len(result) > 0:
-                    for res in result:
-                        boxes = res.get('dt_polys', [])
-                        texts = res.get('rec_texts', [])
-                        scores = res.get('rec_scores', [])
-                        for box, text, conf in zip(boxes, texts, scores):
-                            parsed_lines.append((box, str(text).strip(), float(conf)))
-            except Exception:
-                pass
-
-        if len(parsed_lines) == 0 and hasattr(ocr, 'ocr'):
-            try:
-                result = ocr.ocr(image_path, cls=False)
-                if result and result[0] is not None:
-                    for line in result[0]:
-                        box = line[0]
-                        text = str(line[1][0]).strip()
-                        conf = float(line[1][1])
-                        parsed_lines.append((box, text, conf))
-            except Exception:
-                pass
+        result = local_ocr.ocr(image_path, cls=False)
+        if result and result[0] is not None:
+            for line in result[0]:
+                box = line[0]
+                text = str(line[1][0]).strip()
+                conf = float(line[1][1])
+                if text:
+                    parsed_lines.append((box, text, conf))
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "declarations": [],
+            "missing_tags": [],
+            "error": f"Local OCR failed: {exc}",
+        }
 
     misleading_patterns = [
         r"\bminimum\s+\d+(?:[.,]\d+)?",
@@ -182,17 +142,19 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         
         if is_mrp_text or is_rs_number or is_price_value_near_mrp:
             tag = "mrp"
-            if height_mm < 1.0 and not is_medical_device:
-                is_compliant = False
-                failure_reason = f"MRP font height ({height_mm}mm) is below minimum required 1.0mm (Rule 7)."
+
+        # Unit sale price is a separate declaration; it cannot be derived from
+        # MRP alone because its basis depends on the declared quantity/unit.
+        elif "unit sale price" in text_lower or "unit price" in text_lower or re.search(
+            r"(?:₹\s*\d|rs\.?\s*\d).{0,30}(?:/|\bper\b)\s*(?:100\s*)?(?:kg|g|l|ml|piece|unit)\b",
+            text_lower,
+        ):
+            tag = "unit_sale_price"
 
         # --- 2. Net Quantity Detection ---
         elif any(k in text_lower for k in ["net wt", "net weight", "net qty", "net quantity", " 30g", "30 g", "30g", "wt.", "weight"]) or \
              (bool(re.search(r'\b\d+\s*(?:g|gm|gms|ml|l|kg|mg)\b', text_lower)) and not any(k in text_lower for k in ["usp", "ip", "w/w", "%", "iodine"])):
             tag = "net_quantity"
-            if height_mm < 1.0 and not is_medical_device:
-                is_compliant = False
-                failure_reason = f"Net Quantity font height ({height_mm}mm) is below minimum required 1.0mm (Rule 7)."
 
         # --- 3. Batch Code Detection ---
         elif any(k in text_lower for k in ["batch", "lot no", "b. no", "b.no", "batch no"]):
@@ -239,7 +201,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
             from backend.app.db.models import ComplianceRule
             rule = db.query(ComplianceRule).filter(ComplianceRule.tag == tag.upper(), ComplianceRule.category_id == category_id).first()
             if rule and rule.legal_act_reference:
-                db_message = f"Verified via DB: {rule.legal_act_reference}"
+                db_message = f"Prototype rule reference: {rule.legal_act_reference}"
             else:
                 db_message = FIELD_MESSAGES.get(tag, "Declaration verified.")
         else:
@@ -260,43 +222,33 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     # Check missing mandatory tags against the Database
     missing_tags = []
     if db is not None:
-        from backend.app.db.models import ComplianceRule, ExemptionClause
+        from backend.app.db.models import ComplianceRule
         mandatory_rules = db.query(ComplianceRule).filter(ComplianceRule.category_id == category_id, ComplianceRule.is_mandatory == True).all()
         mandatory_tags = {r.tag for r in mandatory_rules}
         found_tags = {d["tag"].upper() for d in declarations}
-        
-        # --- APPLY RULE 32: WEIGHT UNDER 10G EXEMPTION (Except Tobacco) ---
-        is_tobacco = any("tobacco" in p[1].lower() or "pan masala" in p[1].lower() for p in parsed_lines)
-        if weight_under_10g and not is_tobacco:
-            # Exempt from all declarations except standard generic names
-            mandatory_tags = set()
-            
-        # --- APPLY INSTITUTIONAL EXEMPTION (Rule 2(bb) & 2(bc)) ---
-        if is_institutional:
-            # Exempt from MRP, Unit Sale Price
-            if "MRP" in mandatory_tags: mandatory_tags.remove("MRP")
-            if "UNIT_SALE_PRICE" in mandatory_tags: mandatory_tags.remove("UNIT_SALE_PRICE")
-            
-            # Must have 'Not for retail sale'
-            has_not_for_retail = any("not for retail" in p[1].lower() for p in parsed_lines)
-            if not has_not_for_retail:
-                mandatory_tags.add("NOT_FOR_RETAIL_SALE_DECLARATION")
 
-        # --- APPLY LANGUAGE RULE 4 CHECK ---
-        # If no english/hindi is detected, language check fails
+        # This prototype has no ruleset for applying these context-dependent
+        # exemptions. Do not silently remove declarations based on a checkbox.
         has_valid_language = any(re.search(r'[a-zA-Z\u0900-\u097F]', p[1]) for p in parsed_lines)
         if has_valid_language:
             found_tags.add("LANGUAGE_CHECK")
 
         missing_tags = list(mandatory_tags - found_tags)
+
+    warnings = [
+        "Displayed text-height values are rough estimates from fixed, uncalibrated camera geometry. They are not used to determine scan status or establish compliance."
+    ]
+    if is_institutional or rule_33_gst_active or weight_under_10g or is_medical_device:
+        warnings.append("Special category or exemption context was supplied but is not automatically evaluated. Review the applicable rules manually.")
     
-    status = "NON_COMPLIANT" if (len(declarations) == 0 or len(missing_tags) > 0 or any(not d["is_compliant"] for d in declarations)) else "COMPLIANT"
+    status = "POTENTIAL_ISSUES" if (len(declarations) == 0 or len(missing_tags) > 0 or any(not d["is_compliant"] for d in declarations)) else "NO_FLAGS"
     
     return {
         "status": status,
         "product_type": product_type,
         "declarations": declarations,
         "missing_tags": missing_tags,
+        "warnings": warnings,
         "ar_parameters": {
             "distance_mm": distance_mm,
             "focal_length_px": focal_length_px

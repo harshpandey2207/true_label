@@ -4,11 +4,21 @@ import 'package:printing/printing.dart';
 import 'report_generator.dart';
 
 class ReportViewer {
+  static String _currentDate() {
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+    final now = DateTime.now();
+    return '${monthNames[now.month - 1]} ${now.day}, ${now.year}';
+  }
+
   static void showPdfDialog({
     required BuildContext context,
     required String reportId,
     required String product,
-    required String violation,
+    required String findingsOrNotes,
+    required bool noFlagsDetected,
     List<Uint8List>? proofImages,
   }) {
     showDialog(
@@ -40,7 +50,7 @@ class ReportViewer {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Official Legal Metrology Report - $reportId', 
+                        'Automated Screening Summary - $reportId',
                         style: TextStyle(
                           color: theme.brightness == Brightness.dark ? Colors.white : Colors.black87, 
                           fontWeight: FontWeight.bold, 
@@ -59,9 +69,9 @@ class ReportViewer {
                     future: ReportGenerator.generatePdfReport(
                       reportId: reportId,
                       product: product,
-                      violation: violation,
-                      isCompliant: violation == 'None' || violation.isEmpty,
-                      timestamp: 'October 16, 2026',
+                      findingsOrNotes: findingsOrNotes,
+                      noFlagsDetected: noFlagsDetected,
+                      timestamp: _currentDate(),
                       proofImages: proofImages,
                     ),
                     builder: (context, snapshot) {
@@ -74,7 +84,7 @@ class ReportViewer {
                           canChangeOrientation: false,
                           canChangePageFormat: false,
                           canDebug: false,
-                          pdfFileName: '$reportId-Compliance-Report.pdf',
+                          pdfFileName: '$reportId-Screening-Summary.pdf',
                         );
                       }
                       return const Center(child: Text('Failed to generate PDF'));

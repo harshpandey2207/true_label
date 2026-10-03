@@ -40,7 +40,7 @@ class BoundingBoxPainter extends CustomPainter {
       canvas.drawPath(path, paint);
 
       final textSpan = TextSpan(
-        text: '${item['tag']} (${item['height_mm']}mm)',
+        text: '${item['tag']} (≈${item['height_mm']} mm est.)',
         style: TextStyle(
           color: isCompliant ? Colors.greenAccent : Colors.redAccent,
           fontSize: 14,

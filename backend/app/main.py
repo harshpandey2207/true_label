@@ -27,7 +27,7 @@ app.add_middleware(
 def root():
     return {
         "status": "ONLINE",
-        "service": "True Label Legal Metrology AI Engine",
+        "service": "True Label Package Label Screening API",
         "version": "1.2.0",
         "docs": "/docs"
     }
