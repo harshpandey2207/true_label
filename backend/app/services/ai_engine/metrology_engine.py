@@ -11,6 +11,8 @@ import cv2
 import re
 from typing import Dict, Any
 
+cv2.setNumThreads(1)
+
 _ocr = None
 _ocr_error = None
 
@@ -41,11 +43,21 @@ OINTMENT_RULES = [
 
 FIELD_MESSAGES = {
     "mrp": "Retail sale price must be declared inclusive of all taxes.",
-    "manufacturer": "Manufacturer/packer details must be declared.",
+    "manufacturer": "Manufacturer, packer or importer details must be declared where applicable.",
     "consumer_care": "Consumer complaint contact details must be present.",
     "net_quantity": "Net quantity must be declared using appropriate weight/volume units.",
     "batch_code": "Batch or lot identification must be declared.",
     "manufacturing_date": "Manufacturing or expiry date must be declared.",
+    "best_before_date": "Best-before or use-by declaration detected; review its wording and date.",
+    "expiry_date": "Expiry declaration detected; verify its wording and date.",
+    "fssai_license": "FSSAI licence or registration text detected; verify the number and applicability.",
+    "veg_non_veg_logo": "Food symbol wording detected; verify the required symbol directly on the package.",
+    "bis_mark": "BIS/ISI text detected; verify certification and applicability.",
+    "country_of_origin": "Country-of-origin text detected; verify the declaration and product origin.",
+    "model": "Model identification text detected; verify the value against the product.",
+    "serial_number": "Serial number text detected; verify the value against the product.",
+    "size": "Size declaration detected; verify the declared size and unit.",
+    "ingredients": "Ingredients text detected; review required ingredient and allergen disclosures.",
     "storage": "Storage instructions must be declared.",
     "language": "Declarations must be in English or Hindi.",
     "quantity_unit": "Quantity must use recognized units.",
@@ -60,8 +72,9 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     orig_h, orig_w = img.shape[:2]
     h_img, w_img = orig_h, orig_w
     
-    # Auto-downscale high-res images to max 500px for fast ~20-25s inference
-    max_side = 500
+    # Keep enough detail for small package text while limiting peak memory and
+    # network payload size on the small hosted instance.
+    max_side = 1800
     scale = 1.0
     if max(orig_h, orig_w) > max_side:
         scale = max_side / max(orig_h, orig_w)
@@ -72,60 +85,83 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
 
     parsed_lines = []
 
-    # Using OCR.space API to prevent 512MB RAM OOM crashes on Render free tier
+    # OCR.Space is the deployment-safe default for small instances. It receives
+    # the submitted image; set OCR_ENGINE=paddle on a host with enough RAM to
+    # run PaddleOCR locally instead.
+    ocr_engine = os.getenv("OCR_ENGINE", "ocr_space").strip().lower()
     try:
-        import requests
-        import base64
-        
-        with open(image_path, "rb") as image_file:
-            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
-            
-        payload = {
-            'base64Image': f"data:image/jpeg;base64,{base64_image}",
-            'language': 'eng',
-            'isOverlayRequired': True
-        }
-        headers = {
-            'apikey': 'helloworld' # Free tier public key
-        }
-        
-        response = requests.post('https://api.ocr.space/parse/image', data=payload, headers=headers, timeout=30)
-        result = response.json()
-        
-        if result.get('IsErroredOnProcessing'):
-            raise Exception(result.get('ErrorMessage', ['Unknown error'])[0])
-            
-        parsed_results = result.get('ParsedResults', [])
-        if parsed_results:
-            lines = parsed_results[0].get('TextOverlay', {}).get('Lines', [])
-            for line in lines:
-                text = line.get('LineText', '').strip()
-                if not text: continue
-                
-                # Mock bounding box structure to match PaddleOCR format
-                # OCR.space returns MinTop, MinLeft, MaxHeight, MaxWidth
-                words = line.get('Words', [])
-                if words:
-                    top = min(w['Top'] for w in words)
-                    left = min(w['Left'] for w in words)
-                    height = max(w['Height'] for w in words)
-                    width = sum(w['Width'] for w in words)
-                    
-                    box = [
-                        [left, top],
-                        [left + width, top],
-                        [left + width, top + height],
-                        [left, top + height]
-                    ]
-                    # Default confidence to 0.95 for OCR.space
-                    parsed_lines.append((box, text, 0.95))
-                    
+        if ocr_engine in {"paddle", "paddleocr"}:
+            engine = _get_local_ocr()
+            if engine is None:
+                raise RuntimeError(_ocr_error or "PaddleOCR could not be loaded.")
+            pages = engine.ocr(image_path, cls=False) or []
+            for page in pages:
+                if not page:
+                    continue
+                for item in page:
+                    try:
+                        box, (text, confidence) = item
+                        text = str(text).strip()
+                        if text:
+                            parsed_lines.append((box, text, float(confidence)))
+                    except (TypeError, ValueError):
+                        continue
+        elif ocr_engine == "ocr_space":
+            import requests
+            import base64
+
+            api_key = os.getenv("OCR_SPACE_API_KEY", "helloworld").strip()
+            if not api_key:
+                raise RuntimeError("OCR_SPACE_API_KEY must be configured when OCR_ENGINE=ocr_space.")
+
+            with open(image_path, "rb") as image_file:
+                base64_image = base64.b64encode(image_file.read()).decode("ascii")
+
+            payload = {
+                "base64Image": f"data:image/jpeg;base64,{base64_image}",
+                "language": "eng",
+                "isOverlayRequired": True,
+            }
+            headers = {"apikey": api_key}
+            response = requests.post("https://api.ocr.space/parse/image", data=payload, headers=headers, timeout=(5, 20))
+            response.raise_for_status()
+            result = response.json()
+            if result.get("IsErroredOnProcessing"):
+                raise RuntimeError(result.get("ErrorMessage") or "OCR.Space could not process the image.")
+
+            parsed_results = result.get("ParsedResults") or []
+            if parsed_results:
+                parsed_page = parsed_results[0]
+                lines = (parsed_page.get("TextOverlay") or {}).get("Lines") or []
+                for line in lines:
+                    words = line.get("Words") or []
+                    text = " ".join(str(word.get("WordText", "")).strip() for word in words).strip()
+                    if not text or not words:
+                        continue
+                    try:
+                        top = min(int(word["Top"]) for word in words)
+                        left = min(int(word["Left"]) for word in words)
+                        bottom = max(int(word["Top"]) + int(word["Height"]) for word in words)
+                        right = max(int(word["Left"]) + int(word["Width"]) for word in words)
+                    except (KeyError, TypeError, ValueError):
+                        continue
+                    box = [[left, top], [right, top], [right, bottom], [left, bottom]]
+                    # OCR.Space's documented overlay response has word geometry
+                    # but no confidence score; do not fabricate one.
+                    parsed_lines.append((box, text, None))
+                if not parsed_lines:
+                    for text in str(parsed_page.get("ParsedText") or "").splitlines():
+                        text = text.strip()
+                        if text:
+                            parsed_lines.append(([[0, 0], [0, 0], [0, 0], [0, 0]], text, None))
+        else:
+            raise RuntimeError("OCR_ENGINE must be 'ocr_space' or 'paddle'.")
     except Exception as exc:
         return {
             "status": "ERROR",
             "declarations": [],
             "missing_tags": [],
-            "error": f"OCR API failed: {exc}",
+            "error": f"{ocr_engine} text recognition failed: {exc}",
         }
 
     misleading_patterns = [
@@ -141,6 +177,9 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     # Pre-scan full document context to help multi-line detection
     full_doc_text = " ".join([p[1] for p in parsed_lines]).lower()
     has_global_mrp_header = any(k in full_doc_text for k in ["m.r.p", "mrp", "max. retail price", "retail price"])
+    product_category = (product_type or "").lower()
+    food_category = "food" in product_category
+    cosmetics_category = "cosmetic" in product_category or "pharma" in product_category
 
     for idx, (box, text, conf) in enumerate(parsed_lines):
         # Calculate bounding box height
@@ -162,6 +201,28 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         prev_text = parsed_lines[idx - 1][1].lower() if idx > 0 else ""
         next_text = parsed_lines[idx + 1][1].lower() if idx < len(parsed_lines) - 1 else ""
         context_window = f"{prev_text} {text_lower} {next_text}"
+
+        # Category-specific declarations that are otherwise easy to miss with
+        # general-purpose text heuristics. Symbols and applicability still
+        # require direct human review.
+        if "fssai" in text_lower:
+            tag = "fssai_license"
+        elif re.search(r"\b(?:non[\s-]?vegetarian|vegetarian|veg[\s-]?(?:logo|mark|symbol|dot)|green dot|brown dot)\b", text_lower):
+            tag = "veg_non_veg_logo"
+        elif re.search(r"\b(?:bis|isi)\s*(?:mark|licen[cs]e|standard|no\.?|registration)?\b", text_lower) or "bureau of indian standards" in text_lower:
+            tag = "bis_mark"
+        elif "country of origin" in text_lower or re.search(r"\bmade\s+in\s+[a-z][a-z .'-]+", text_lower):
+            tag = "country_of_origin"
+        elif re.search(r"\bmodel\s*(?:no\.?|number)\b|\bmodel\s*:", text_lower):
+            tag = "model"
+        elif re.search(r"\bserial\s*(?:no\.?|number)\b|\bserial\s*:", text_lower):
+            tag = "serial_number"
+        elif re.search(r"\bsize\s*:", text_lower):
+            tag = "size"
+        elif "ingredients" in text_lower or "allergen" in text_lower:
+            tag = "ingredients"
+        elif re.search(r"\b(?:best\s+before|use\s+by)\b", text_lower):
+            tag = "best_before_date"
         
         # --- 1. MRP Detection ---
         # Matches: "M.R.P. Rs. 105.41", "M.R.P. Rs.", "105.41" next to MRP, "₹105", "Rs. 105", etc.
@@ -169,7 +230,9 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         is_rs_number = bool(re.search(r'(?:rs\.?|₹|inr)\s*\d+', text_lower))
         is_price_value_near_mrp = (has_global_mrp_header or "mrp" in context_window or "m.r.p" in context_window) and bool(re.search(r'^\d+[.,]\d{2}$', text_lower))
         
-        if is_mrp_text or is_rs_number or is_price_value_near_mrp:
+        if tag != "general":
+            pass
+        elif is_mrp_text or is_rs_number or is_price_value_near_mrp:
             tag = "mrp"
 
         # Unit sale price is a separate declaration; it cannot be derived from
@@ -192,7 +255,9 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
             tag = "batch_code"
 
         # --- 4. Manufacturing & Expiry Date Detection ---
-        elif any(k in text_lower for k in ["mfg", "mfd", "expiry", "exp.", "exp date", "pkd", "packed", "date"]):
+        elif any(k in text_lower for k in ["expiry", "exp.", "exp date"]):
+            tag = "expiry_date" if cosmetics_category else ("best_before_date" if food_category else "manufacturing_date")
+        elif any(k in text_lower for k in ["mfg", "mfd", "pkd", "packed", "date"]):
             tag = "manufacturing_date"
         elif any(k in prev_text for k in ["mfg", "expiry", "exp"]) and bool(re.search(r'\d{2}/\d{4}|\d{2}/\d{2}', text_lower)):
             tag = "manufacturing_date"
@@ -206,7 +271,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
             tag = "storage"
 
         # --- 7. Manufacturer / Marketing Details ---
-        elif any(k in text_lower for k in ["marketed by", "manufactured by", "mfd. by", "mfd by", "mfg. lic", "mfg by", "cipla health"]):
+        elif any(k in text_lower for k in ["marketed by", "manufactured by", "imported by", "importer", "mfd. by", "mfd by", "mfg. lic", "mfg by", "cipla health"]):
             tag = "manufacturer"
 
         # Check for misleading quantity expressions
@@ -224,26 +289,27 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         ]
 
     # Determine dynamic message from Database Rules
-        db_message = "Declaration verified."
+        db_message = "Text detected; verify the declaration's content and applicability."
         if db is not None:
             # Query the database for the specific compliance rule
             from backend.app.db.models import ComplianceRule
             rule = db.query(ComplianceRule).filter(ComplianceRule.tag == tag.upper(), ComplianceRule.category_id == category_id).first()
             if rule and rule.legal_act_reference:
-                db_message = f"Prototype rule reference: {rule.legal_act_reference}"
+                db_message = f"Configured rule reference: {rule.legal_act_reference}"
             else:
-                db_message = FIELD_MESSAGES.get(tag, "Declaration verified.")
+                db_message = FIELD_MESSAGES.get(tag, "Text detected; verify the declaration's content and applicability.")
         else:
-            db_message = FIELD_MESSAGES.get(tag, "Declaration verified.")
+            db_message = FIELD_MESSAGES.get(tag, "Text detected; verify the declaration's content and applicability.")
 
         declarations.append({
             "text": text,
             "tag": tag.upper(),
             "field": tag,
-            "confidence": round(conf, 2),
+            "confidence": round(conf, 2) if conf is not None else None,
             "box": scaled_box,
             "height_mm": height_mm,
-            "is_compliant": is_compliant,
+            "is_compliant": False if not is_compliant else None,
+            "finding_status": "FLAGGED" if not is_compliant else "DETECTED",
             "message": failure_reason if failure_reason else db_message,
             "failure_reason": failure_reason
         })
@@ -256,8 +322,8 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         mandatory_tags = {r.tag for r in mandatory_rules}
         found_tags = {d["tag"].upper() for d in declarations}
 
-        # This prototype has no ruleset for applying these context-dependent
-        # exemptions. Do not silently remove declarations based on a checkbox.
+        # Context-dependent exemptions are not evaluated here. Do not silently
+        # remove declarations based on a user-supplied checkbox.
         has_valid_language = any(re.search(r'[a-zA-Z\u0900-\u097F]', p[1]) for p in parsed_lines)
         if has_valid_language:
             found_tags.add("LANGUAGE_CHECK")
@@ -270,10 +336,15 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     if is_institutional or rule_33_gst_active or weight_under_10g or is_medical_device:
         warnings.append("Special category or exemption context was supplied but is not automatically evaluated. Review the applicable rules manually.")
     
-    status = "POTENTIAL_ISSUES" if (len(declarations) == 0 or len(missing_tags) > 0 or any(not d["is_compliant"] for d in declarations)) else "NO_FLAGS"
+    status = "POTENTIAL_ISSUES" if (
+        len(declarations) == 0
+        or len(missing_tags) > 0
+        or any(d["finding_status"] == "FLAGGED" for d in declarations)
+    ) else "NO_FLAGS"
     
     return {
         "status": status,
+        "ocr_engine": ocr_engine,
         "product_type": product_type,
         "declarations": declarations,
         "missing_tags": missing_tags,
