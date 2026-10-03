@@ -170,10 +170,8 @@ Generate {num_sides} sides in the array. Return only the raw JSON.
         try:
             result_text = call_llama_vision(prompt, images_b64)
         except Exception as e:
-            if model_override == "llama":
-                raise e
-            used_model = "Gemini-2.0-Flash (Fallback)"
-            result_text = call_gemini_vision(prompt, images_b64)
+            # We want to see the ACTUAL Groq error, not hide it behind Gemini fallback
+            raise HTTPException(status_code=502, detail=f"Groq/Llama API Error: {str(e)}")
     else:
         used_model = "Gemini-2.0-Flash (Fallback)"
         result_text = call_gemini_vision(prompt, images_b64)
