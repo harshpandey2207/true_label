@@ -20,24 +20,14 @@ idna==3.10
 charset-normalizer==3.4.0
 
 # Image processing
-opencv-python-headless==4.10.0.84
 pillow==10.4.0
 numpy==1.26.4
 
 # PaddleOCR — pinned to 2.9.1 (stable, fast on CPU, no PIR/oneDNN bug)
-# paddlepaddle 2.6.2 = last stable CPU version before 3.x PIR regressions
-paddlepaddle==2.6.2
-paddleocr==2.9.1
 
 # PaddleOCR 2.x dependencies
-shapely==2.0.6
-pyclipper==1.3.0.post5
-python-bidi==0.4.2
-imgaug==0.4.0
-lmdb==1.5.1
 tqdm==4.67.1
 PyYAML==6.0.2
-attrdict==2.0.1
 
 # Utilities
 packaging==24.2
@@ -46,8 +36,6 @@ setuptools==75.6.0
 
 # cache buster 2
 
-scipy==1.11.4
-scikit-image==0.22.0
 
 # Database architecture
 SQLAlchemy==2.0.25
