@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Float
+from sqlalchemy import Column, JSON, Integer, String, Boolean, ForeignKey, DateTime, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from backend.app.db.database import Base
@@ -67,3 +67,24 @@ class ScanHistory(Base):
     
     category = relationship("ProductCategory", back_populates="scans")
 
+
+
+class UserAccount(Base):
+    __tablename__ = "user_accounts"
+    id = Column(Integer, primary_key=True, index=True)
+    full_name = Column(String)
+    email = Column(String, unique=True, index=True)
+    password_hash = Column(String)
+    role = Column(String, default="business_owner")
+    organization_name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"))
+    action = Column(String)
+    entity_type = Column(String)
+    entity_id = Column(String)
+    details = Column(JSON)
