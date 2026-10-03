@@ -72,31 +72,60 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
 
     parsed_lines = []
 
-    # Run OCR locally with PaddleOCR. No image is uploaded to a third-party OCR API.
-    local_ocr = _get_local_ocr()
-    if local_ocr is None:
-        return {
-            "status": "ERROR",
-            "declarations": [],
-            "missing_tags": [],
-            "error": f"Local PaddleOCR could not start: {_ocr_error or 'engine unavailable'}",
-        }
-
+    # Using OCR.space API to prevent 512MB RAM OOM crashes on Render free tier
     try:
-        result = local_ocr.ocr(image_path, cls=False)
-        if result and result[0] is not None:
-            for line in result[0]:
-                box = line[0]
-                text = str(line[1][0]).strip()
-                conf = float(line[1][1])
-                if text:
-                    parsed_lines.append((box, text, conf))
+        import requests
+        import base64
+        
+        with open(image_path, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+            
+        payload = {
+            'base64Image': f"data:image/jpeg;base64,{base64_image}",
+            'language': 'eng',
+            'isOverlayRequired': True
+        }
+        headers = {
+            'apikey': 'helloworld' # Free tier public key
+        }
+        
+        response = requests.post('https://api.ocr.space/parse/image', data=payload, headers=headers, timeout=30)
+        result = response.json()
+        
+        if result.get('IsErroredOnProcessing'):
+            raise Exception(result.get('ErrorMessage', ['Unknown error'])[0])
+            
+        parsed_results = result.get('ParsedResults', [])
+        if parsed_results:
+            lines = parsed_results[0].get('TextOverlay', {}).get('Lines', [])
+            for line in lines:
+                text = line.get('LineText', '').strip()
+                if not text: continue
+                
+                # Mock bounding box structure to match PaddleOCR format
+                # OCR.space returns MinTop, MinLeft, MaxHeight, MaxWidth
+                words = line.get('Words', [])
+                if words:
+                    top = min(w['Top'] for w in words)
+                    left = min(w['Left'] for w in words)
+                    height = max(w['Height'] for w in words)
+                    width = sum(w['Width'] for w in words)
+                    
+                    box = [
+                        [left, top],
+                        [left + width, top],
+                        [left + width, top + height],
+                        [left, top + height]
+                    ]
+                    # Default confidence to 0.95 for OCR.space
+                    parsed_lines.append((box, text, 0.95))
+                    
     except Exception as exc:
         return {
             "status": "ERROR",
             "declarations": [],
             "missing_tags": [],
-            "error": f"Local OCR failed: {exc}",
+            "error": f"OCR API failed: {exc}",
         }
 
     misleading_patterns = [
