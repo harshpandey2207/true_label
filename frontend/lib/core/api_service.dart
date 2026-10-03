@@ -59,4 +59,41 @@ class ApiService {
       };
     }
   }
+
+  static Future<Map<String, dynamic>?> generateLabel({
+    required List<XFile> imageFiles,
+    required String productName,
+    required String productCategory,
+    required String shape,
+    required String dimensions,
+    required String customPrompt,
+    required Map<String, String> missingTagValues,
+  }) async {
+    try {
+      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/label/generate'));
+
+      request.fields['product_name'] = productName;
+      request.fields['product_category'] = productCategory;
+      request.fields['shape'] = shape;
+      request.fields['dimensions'] = dimensions;
+      request.fields['custom_prompt'] = customPrompt;
+      request.fields['missing_tag_values'] = jsonEncode(missingTagValues);
+
+      for (var imageFile in imageFiles) {
+        var bytes = await imageFile.readAsBytes();
+        request.files.add(http.MultipartFile.fromBytes('images', bytes, filename: imageFile.name));
+      }
+
+      var response = await request.send();
+      final respStr = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
+        return jsonDecode(respStr);
+      } else {
+        return {'success': false, 'error': 'Backend error ${response.statusCode}: $respStr'};
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'Connection error: $e'};
+    }
+  }
 }
