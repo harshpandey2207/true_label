@@ -160,19 +160,22 @@ class ApiService {
       ? const <String, String>{}
       : <String, String>{'Authorization': 'Bearer ' + _sessionToken!};
 
-  static Future<Map<String, dynamic>> _authRequest(String endpoint, Map<String, String> payload) async {
+    static Future<Map<String, dynamic>> _authRequest(String endpoint, Map<String, dynamic> payload) async {
     final response = await http.post(
       Uri.parse(baseUrl + endpoint),
-      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-      body: payload,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(payload),
     ).timeout(const Duration(seconds: 15));
 
-    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
-    throw Exception('Authentication failed');
+    if (response.statusCode == 200 || response.statusCode == 201) return jsonDecode(response.body);
+    
+    dynamic detail;
+    try { detail = jsonDecode(response.body)['detail']; } catch (_) {}
+    throw Exception(detail ?? 'Authentication failed');
   }
 
   static Future<void> signIn({required String email, required String password}) async {
-    final session = await _authRequest('/auth/login', {'username': email, 'password': password});
+    final session = await _authRequest('/auth/login', {'email': email, 'password': password});
     _sessionToken = session['access_token']?.toString();
     currentUser = Map<String, dynamic>.from(session['user'] as Map);
   }
