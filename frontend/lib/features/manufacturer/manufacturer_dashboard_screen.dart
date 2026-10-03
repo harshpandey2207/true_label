@@ -124,8 +124,8 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
           case 4: return _StatutoryFinesScreen();
           case 5: return _LegalNoticesScreen();
           case 6: return _AILabelGeneratorScreen(initialMissingTags: _missingTagsForGenerator);
-          case 7: return _ProfileScreen();
-          case 8: return const _LogoutScreen();
+          case 7: return Center(child: Text('Manufacturer Profile'));
+          case 8: return Center(child: Text('Logout'));
           default: return Center(child: Text('Screen not found', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)));
         }
       },
@@ -820,37 +820,39 @@ class _AILabelGeneratorScreen extends StatefulWidget {
   __AILabelGeneratorScreenState createState() => __AILabelGeneratorScreenState();
 }
 
-class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
+class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with TickerProviderStateMixin {
   bool _isGenerating = false;
-  bool _showLabel = false;
-  bool _isExporting = false;
-  bool _hasReferenceImage = false;
-  final GlobalKey _labelKey = GlobalKey();
+  bool _hasReferenceImages = false;
+  Map<String, dynamic>? _labelData;
+  String? _errorMessage;
+  String? _uspAutoCalc;
+  int _selectedSideIndex = 0;
+  TabController? _sideTabController;
 
-  final _productNameController = TextEditingController(text: 'My Custom Product');
-  final _shapeController = TextEditingController(text: 'Cylindrical Bottle Wrap');
-  final _dimensionController = TextEditingController(text: '12cm x 6cm');
-  late TextEditingController _promptController;
+  final _productNameController = TextEditingController(text: 'My Product');
+  final _shapeController = TextEditingController(text: 'Rectangular');
+  final _dimensionController = TextEditingController(text: '10cm x 15cm');
+  final _promptController = TextEditingController(text: 'Make it look premium and professional. Follow brand colors from uploaded images.');
   
-  // Dynamic controllers for missing tags
+  // Dynamic controllers for missing tags (excluding USP - auto calculated)
   final Map<String, TextEditingController> _missingTagControllers = {};
   List<String> _missingTags = [];
-
-  String _rule7RequiredHeight = '4.0mm';
+  
+  final List<XFile> _referenceImages = [];
+  final ImagePicker _picker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
-    String defaultPrompt = 'Make it look organic and premium. Use dark green accents, preserve the original brand DNA, and ensure Legal Metrology rules are followed.';
-    
     if (widget.initialMissingTags != null && widget.initialMissingTags!.isNotEmpty) {
-      _missingTags = widget.initialMissingTags!.split(',').map((e) => e.trim()).toList();
+      _missingTags = widget.initialMissingTags!.split(',').map((e) => e.trim()).where((t) {
+        // Filter out USP - it will be auto-calculated from MRP
+        return t.toUpperCase() != 'USP' && t.toUpperCase() != 'UNIT_SALE_PRICE';
+      }).toList();
       for (var tag in _missingTags) {
         _missingTagControllers[tag] = TextEditingController();
       }
     }
-    
-    _promptController = TextEditingController(text: defaultPrompt);
   }
 
   @override
@@ -859,105 +861,100 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
     _shapeController.dispose();
     _dimensionController.dispose();
     _promptController.dispose();
-    for (var controller in _missingTagControllers.values) {
-      controller.dispose();
+    _sideTabController?.dispose();
+    for (var c in _missingTagControllers.values) {
+      c.dispose();
     }
     super.dispose();
   }
 
-  void _generateLabel() {
-    // Basic validation
+  Future<void> _pickImages() async {
+    final List<XFile> photos = await _picker.pickMultiImage(imageQuality: 80);
+    if (photos.isNotEmpty) {
+      setState(() {
+        _referenceImages.clear();
+        _referenceImages.addAll(photos);
+        _hasReferenceImages = true;
+      });
+    }
+  }
+
+  Future<void> _generateLabel() async {
+    // Validate required fields
     for (var tag in _missingTags) {
-      if (_missingTagControllers[tag]!.text.isEmpty) {
+      if (_missingTagControllers[tag]!.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Please provide a value for missing tag: $tag'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Please provide a value for: $tag'), backgroundColor: Colors.red),
         );
         return;
       }
     }
 
-    setState(() => _isGenerating = true);
-    // Simulate AI Vision analysis and Code generation
-    Future.delayed(const Duration(milliseconds: 2500), () {
-      if (mounted) {
-        setState(() {
-          _isGenerating = false;
-          _showLabel = true;
-          // Dynamically compute Rule 7 height (simulated logic)
-          _rule7RequiredHeight = _dimensionController.text.contains('cm') ? '4.0mm' : '6.0mm';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Generative Vision-to-Code complete! Legal Metrology injected.'), 
-            backgroundColor: Colors.green
-          ),
-        );
-      }
+    if (_referenceImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please upload at least one reference label image'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() {
+      _isGenerating = true;
+      _errorMessage = null;
+      _labelData = null;
     });
+
+    // Build missing tag values map
+    final Map<String, String> tagValues = {};
+    for (var tag in _missingTags) {
+      tagValues[tag] = _missingTagControllers[tag]!.text.trim();
+    }
+
+    final result = await ApiService.generateLabel(
+      imageFiles: _referenceImages,
+      productName: _productNameController.text.trim(),
+      productCategory: 'General Packaged Commodity',
+      shape: _shapeController.text.trim(),
+      dimensions: _dimensionController.text.trim(),
+      customPrompt: _promptController.text.trim(),
+      missingTagValues: tagValues,
+    );
+
+    if (!mounted) return;
+
+    if (result != null && result['success'] == true) {
+      final sides = (result['label_data']['sides'] as List?) ?? [];
+      _sideTabController?.dispose();
+      _sideTabController = TabController(length: sides.length, vsync: this);
+      setState(() {
+        _isGenerating = false;
+        _labelData = result['label_data'];
+        _uspAutoCalc = result['usp_auto_calculated'];
+        _selectedSideIndex = 0;
+      });
+    } else {
+      setState(() {
+        _isGenerating = false;
+        _errorMessage = result?['error'] ?? 'Unknown error from AI';
+      });
+    }
   }
 
   void _resetForm() {
     setState(() {
-      _showLabel = false;
-      _isGenerating = false;
-      _hasReferenceImage = false;
+      _labelData = null;
+      _errorMessage = null;
+      _referenceImages.clear();
+      _hasReferenceImages = false;
     });
   }
 
-  Future<void> _exportLabel() async {
-    setState(() => _isExporting = true);
-    await Future.delayed(const Duration(milliseconds: 800)); // Simulate render delay
-    
+  Color _parseColor(String hex) {
     try {
-      final RenderRepaintBoundary boundary = _labelKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
-      final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final Uint8List pngBytes = byteData!.buffer.asUint8List();
-      
-      setState(() => _isExporting = false);
-      
-      if (mounted) {
-        _showExportDialog(pngBytes);
-      }
-    } catch (e) {
-      setState(() => _isExporting = false);
+      final h = hex.replaceAll('#', '');
+      return Color(int.parse('FF$h', radix: 16));
+    } catch (_) {
+      return const Color(0xFF1B4332);
     }
-  }
-
-  void _showExportDialog(Uint8List pngBytes) {
-    final theme = Theme.of(context);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.cardColor,
-        title: Text('Export Production Ready Label', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-        content: SizedBox(
-          width: 320,
-          height: 440,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.memory(pngBytes, fit: BoxFit.contain),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Close', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-          ),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Saved for production packaging print!'), backgroundColor: Colors.green),
-              );
-            },
-            icon: Icon(Icons.check, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-            label: Text('Accept & Save', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildInputField(String label, TextEditingController controller, String hint, ThemeData theme, {int maxLines = 1}) {
@@ -969,9 +966,144 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
         labelText: label,
         hintText: hint,
         hintStyle: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white38 : Colors.black38),
-        labelStyle: TextStyle(color: Colors.greenAccent, fontSize: 13),
-        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87), borderRadius: BorderRadius.circular(8)),
-        focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.greenAccent), borderRadius: BorderRadius.circular(8)),
+        labelStyle: const TextStyle(color: Colors.greenAccent, fontSize: 13),
+        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: theme.brightness == Brightness.dark ? Colors.white54 : Colors.black54), borderRadius: BorderRadius.circular(8)),
+        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.greenAccent), borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+
+  Widget _buildGeneratedLabelCard(Map<String, dynamic> side, Map<String, dynamic> brandDna, ThemeData theme) {
+    final primaryColor = _parseColor(brandDna['primary_color'] ?? '#1B4332');
+    final accentColor = _parseColor(brandDna['accent_color'] ?? '#52B788');
+    final header = side['header'] as Map? ?? {};
+    final bodySections = side['body_sections'] as List? ?? [];
+    final declarations = side['compliance_declarations'] as Map? ?? {};
+    final brandName = header['brand_name'] ?? _productNameController.text;
+    final tagline = header['tagline'] ?? '';
+    final logoDesc = header['logo_description'] ?? '';
+    final layoutDesc = side['layout_description'] ?? '';
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.greenAccent, width: 2),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 2)],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Header / Brand Section
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
+            decoration: BoxDecoration(
+              color: primaryColor,
+              borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+            ),
+            child: Column(
+              children: [
+                if (logoDesc.isNotEmpty) ...[
+                  Icon(Icons.auto_awesome, size: 40, color: accentColor),
+                  const SizedBox(height: 8),
+                ],
+                Text(
+                  brandName.toUpperCase(),
+                  style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2),
+                  textAlign: TextAlign.center,
+                ),
+                if (tagline.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(tagline, style: TextStyle(color: accentColor, fontSize: 13, letterSpacing: 1), textAlign: TextAlign.center),
+                ],
+                if (layoutDesc.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4)),
+                    child: Text(layoutDesc, style: const TextStyle(color: Colors.white70, fontSize: 11), textAlign: TextAlign.center),
+                  ),
+                ],
+              ],
+            ),
+          ),
+
+          // Body Sections (product description etc.)
+          if (bodySections.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: bodySections.map<Widget>((s) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if ((s['section_title'] ?? '').isNotEmpty)
+                          Text(s['section_title'], style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 13)),
+                        if ((s['content'] ?? '').isNotEmpty)
+                          Text(s['content'], style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+          // Legal Metrology Declarations
+          Container(
+            margin: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border.all(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  const Icon(Icons.verified, color: Colors.green, size: 16),
+                  const SizedBox(width: 6),
+                  const Text('LEGAL METROLOGY DECLARATIONS', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 13)),
+                ]),
+                const Divider(height: 16),
+                ...declarations.entries.where((e) => (e.value ?? '').toString().isNotEmpty).map((e) {
+                  final isUsp = e.key.toLowerCase() == 'usp';
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(child: Text('${e.key.toUpperCase().replaceAll('_',' ')}:', style: const TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w600))),
+                        Text(
+                          isUsp && _uspAutoCalc != null && _uspAutoCalc!.isNotEmpty ? _uspAutoCalc! : e.value.toString(),
+                          style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                if (_uspAutoCalc != null && _uspAutoCalc!.isNotEmpty && !declarations.containsKey('usp')) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('USP (AUTO-CALC):', style: TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w600)),
+                        Text(_uspAutoCalc!, style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                ],
+                const Divider(height: 12),
+                Text(side['rule7_note'] ?? 'Rule 7 PCR 2011: Minimum font height verified', style: TextStyle(color: Colors.green.shade700, fontSize: 10)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -981,6 +1113,10 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
     final theme = Theme.of(context);
     final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
     final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
+
+    final sides = (_labelData?['sides'] as List?) ?? [];
+    final brandDna = (_labelData?['brand_dna'] as Map?) ?? {};
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -991,261 +1127,215 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Generative AI Label Remediation Studio', 
-                    style: TextStyle(color: textColor, fontSize: 28, fontWeight: FontWeight.bold)),
-                  SizedBox(height: 6),
-                  Text('Upload your current brand label. Vision AI will extract your brand DNA and write code to dynamically inject strict Legal Metrology compliance.', 
-                    style: TextStyle(color: textMuted, fontSize: 14)),
+                  Text('Generative AI Label Remediation Studio', style: TextStyle(color: textColor, fontSize: 26, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('Upload your current label images → Gemini Vision AI analyzes brand DNA → Generates a compliant label per side', style: TextStyle(color: textMuted, fontSize: 13)),
                 ],
               ),
             ),
-            if (_showLabel)
-              IconButton(
-                onPressed: _resetForm,
-                icon: Icon(Icons.refresh, color: textMuted),
-              )
+            if (_labelData != null)
+              IconButton(onPressed: _resetForm, icon: Icon(Icons.refresh, color: textMuted), tooltip: 'Start Over'),
           ],
         ),
-        SizedBox(height: 20),
+        const SizedBox(height: 16),
         Expanded(
           child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Input Parameters Card
-                Card(
-                  color: theme.cardColor,
-                  child: Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Image Upload Area
-                        Text('1. Reference Brand Image', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: () => setState(() => _hasReferenceImage = true),
-                          child: Container(
-                            width: double.infinity,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: _hasReferenceImage ? Colors.greenAccent : textMuted, width: 2, style: BorderStyle.solid),
-                              borderRadius: BorderRadius.circular(8),
-                              color: _hasReferenceImage ? Colors.greenAccent.withValues(alpha: 0.1) : theme.cardColor,
-                            ),
-                            child: Center(
-                              child: _hasReferenceImage 
-                                ? Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.check_circle, color: Colors.greenAccent, size: 32),
-                                      SizedBox(height: 8),
-                                      Text('Brand Image Analyzed by Vision AI', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold))
-                                    ],
-                                  )
-                                : Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(Icons.cloud_upload_outlined, color: textMuted, size: 32),
-                                      SizedBox(height: 8),
-                                      Text('Click to upload current label or packaging image', style: TextStyle(color: textMuted))
-                                    ],
-                                  ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(height: 24),
-                        
-                        Text('2. Target Shape, Product & Dimensions', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(child: _buildInputField('Product Name', _productNameController, 'e.g. Pure Honey', theme)),
-                            SizedBox(width: 12),
-                            Expanded(child: _buildInputField('Shape', _shapeController, 'e.g. Cylindrical', theme)),
-                            SizedBox(width: 12),
-                            Expanded(child: _buildInputField('Dimensions', _dimensionController, 'e.g. 10cm x 15cm', theme)),
-                          ],
-                        ),
-                        SizedBox(height: 24),
-
-                        if (_missingTags.isNotEmpty) ...[
-                          Text('3. Fill Missing Mandatory Data', style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                          SizedBox(height: 8),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: _missingTags.map((tag) {
-                              return SizedBox(
-                                width: (MediaQuery.of(context).size.width / 2) - 10,
-                                child: _buildInputField('Missing: $tag', _missingTagControllers[tag]!, 'Provide value for $tag', theme),
-                              );
-                            }).toList(),
-                          ),
-                          SizedBox(height: 24),
-                        ],
-
-                        Text('${_missingTags.isNotEmpty ? "4" : "3"}. Custom AI Prompt', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 8),
-                        _buildInputField('AI Instructions', _promptController, 'e.g. Use organic colors, preserve logo...', theme, maxLines: 3),
-                        
-                        SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
-                            onPressed: (_isGenerating || !_hasReferenceImage) ? null : _generateLabel,
-                            icon: _isGenerating 
-                                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, strokeWidth: 2)) 
-                                : Icon(Icons.auto_awesome, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-                            label: Text(
-                              _isGenerating ? 'Synthesizing Generative Layout...' : 'GENERATE COMPLIANT LAYOUT', 
-                              style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 15, fontWeight: FontWeight.bold)
-                            ),
-                          ),
-                        )
-                      ],
-                    ),
-                  ),
-                ),
-                SizedBox(height: 24),
-
-                // Generated Visual Label Preview
-                if (_showLabel)
-                  RepaintBoundary(
-                    key: _labelKey,
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: _shapeController.text.toLowerCase().contains('circle') ? BorderRadius.circular(150) : BorderRadius.circular(12),
-                        border: Border.all(color: Colors.greenAccent, width: 2),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black12, blurRadius: 10, spreadRadius: 2),
-                        ]
-                      ),
-                      child: ClipRRect(
-                        borderRadius: _shapeController.text.toLowerCase().contains('circle') ? BorderRadius.circular(150) : BorderRadius.circular(10),
-                        child: Column(
-                          children: [
-                            // Branding Section (Dynamic Product Name)
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+                if (_labelData == null) ...[
+                  // === INPUT FORM ===
+                  Card(
+                    color: theme.cardColor,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. Upload images
+                          Text('1. Upload Reference Label Images (all sides)', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: _pickImages,
+                            child: Container(
                               width: double.infinity,
-                              color: const Color(0xFF1B4332), // Dark organic green (simulated extraction)
-                              child: Column(
-                                children: [
-                                  Icon(Icons.auto_awesome, size: 48, color: Colors.greenAccent),
-                                  SizedBox(height: 12),
-                                  Text(
-                                    _productNameController.text.toUpperCase(),
-                                    style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold, letterSpacing: 2),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  Text(
-                                    'AI GENERATED LABEL',
-                                    style: TextStyle(color: Colors.greenAccent, fontSize: 12, letterSpacing: 1),
-                                  ),
-                                ],
+                              height: 120,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: _hasReferenceImages ? Colors.greenAccent : textMuted, width: 2),
+                                borderRadius: BorderRadius.circular(8),
+                                color: _hasReferenceImages ? Colors.greenAccent.withValues(alpha: 0.05) : theme.cardColor,
+                              ),
+                              child: Center(
+                                child: _hasReferenceImages
+                                  ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                      const Icon(Icons.check_circle, color: Colors.greenAccent, size: 32),
+                                      const SizedBox(height: 8),
+                                      Text('${_referenceImages.length} image(s) uploaded — Gemini will generate 1 label per image', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                                    ])
+                                  : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                                      Icon(Icons.cloud_upload_outlined, color: textMuted, size: 32),
+                                      const SizedBox(height: 8),
+                                      Text('Tap to upload all sides of the product label', style: TextStyle(color: textMuted)),
+                                      Text('e.g. Front, Back, Left, Right', style: TextStyle(color: textMuted, fontSize: 12)),
+                                    ]),
                               ),
                             ),
-                            // Legal Metrology Section (Dynamic Injection)
-                            Container(
-                              padding: const EdgeInsets.all(24.0),
-                              color: Colors.white,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('LEGAL METROLOGY DECLARATIONS', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 16)),
-                                  SizedBox(height: 16),
-                                  
-                                  // Map over provided missing tags dynamically
-                                  ..._missingTags.map((tag) {
-                                    return Column(
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text('$tag:', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                                            Text(_missingTagControllers[tag]!.text, style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)), // Required height 4mm dynamically applied
-                                          ],
-                                        ),
-                                        Divider(color: Colors.grey.shade300),
-                                      ],
-                                    );
-                                  }).toList(),
+                          ),
+                          const SizedBox(height: 24),
 
-                                  // Simulated additional compliance lines to look complete if missing tags were few
-                                  if (!_missingTags.contains('NET_QUANTITY')) ...[
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('NET QUANTITY:', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                                        Text('100g', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                                      ],
-                                    ),
-                                    Divider(color: Colors.grey.shade300),
-                                  ],
-                                  if (!_missingTags.contains('MRP')) ...[
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text('MRP (Incl. taxes):', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 12)),
-                                        Text('₹100.00', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 14)),
-                                      ],
-                                    ),
-                                    Divider(color: Colors.grey.shade300),
-                                  ],
+                          // 2. Product details
+                          Text('2. Product Details & Shape', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: _buildInputField('Product Name', _productNameController, 'e.g. Pure Honey 500g', theme)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildInputField('Shape', _shapeController, 'e.g. Cylindrical, Rectangular', theme)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildInputField('Dimensions', _dimensionController, 'e.g. 10cm x 15cm', theme)),
+                          ]),
+                          const SizedBox(height: 24),
 
-                                  SizedBox(height: 16),
-                                  // Rule 7 Simulation Badge
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      border: Border.all(color: Colors.greenAccent),
-                                      borderRadius: BorderRadius.circular(4)
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.verified, color: Colors.green, size: 16),
-                                        SizedBox(width: 8),
-                                        Expanded(child: Text('Rule 7 Verified: Numerals formatted to ${_rule7RequiredHeight} minimum height for ${_dimensionController.text} ${_shapeController.text} area.', style: TextStyle(color: Colors.black87, fontSize: 11))),
-                                      ],
-                                    ),
-                                  )
-                                ],
-                              ),
-                            )
+                          // 3. Missing mandatory data (if any)
+                          if (_missingTags.isNotEmpty) ...[
+                            Text('3. Fill Missing Mandatory Data (detected by scanner)', style: const TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text('USP will be auto-calculated from MRP — no need to enter it manually.', style: TextStyle(color: textMuted, fontSize: 12)),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: _missingTags.map((tag) {
+                                return SizedBox(
+                                  width: (MediaQuery.of(context).size.width / 2) - 20,
+                                  child: _buildInputField('Missing: $tag', _missingTagControllers[tag]!, 'Value for $tag', theme),
+                                );
+                              }).toList(),
+                            ),
+                            const SizedBox(height: 24),
                           ],
-                        ),
+
+                          // 4. Custom prompt
+                          Text('${_missingTags.isNotEmpty ? "4" : "3"}. Custom AI Prompt', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          _buildInputField('Design Instructions to AI', _promptController, 'e.g. Use earthy tones, premium look, bold product name', theme, maxLines: 3),
+                          const SizedBox(height: 24),
+
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.greenAccent),
+                              onPressed: _isGenerating ? null : _generateLabel,
+                              icon: _isGenerating
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2))
+                                  : const Icon(Icons.auto_awesome, color: Colors.black),
+                              label: Text(
+                                _isGenerating ? 'Gemini Vision is analyzing & generating labels...' : 'GENERATE AI-POWERED COMPLIANT LABELS',
+                                style: const TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ),
+
+                          if (_isGenerating) ...[
+                            const SizedBox(height: 16),
+                            Center(child: Text('Gemini Vision AI is: reading brand colors, fonts, layout → generating ${_referenceImages.length} label side(s)...', style: TextStyle(color: textMuted, fontSize: 12), textAlign: TextAlign.center)),
+                          ],
+
+                          if (_errorMessage != null) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(color: Colors.red.shade50, border: Border.all(color: Colors.red), borderRadius: BorderRadius.circular(8)),
+                              child: Row(children: [
+                                const Icon(Icons.error, color: Colors.red),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text(_errorMessage!, style: const TextStyle(color: Colors.red))),
+                              ]),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                   ),
+                ] else ...[
+                  // === AI GENERATED OUTPUT ===
+                  // Brand DNA summary
+                  Card(
+                    color: theme.cardColor,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('AI Extracted Brand DNA', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            _colorChip(brandDna['primary_color'] ?? '#1B4332', 'Primary'),
+                            const SizedBox(width: 12),
+                            _colorChip(brandDna['secondary_color'] ?? '#FFFFFF', 'Secondary'),
+                            const SizedBox(width: 12),
+                            _colorChip(brandDna['accent_color'] ?? '#52B788', 'Accent'),
+                          ]),
+                          if ((brandDna['font_style'] ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text('Font: ${brandDna['font_style']}', style: TextStyle(color: textMuted, fontSize: 13)),
+                          ],
+                          if ((brandDna['design_aesthetic'] ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text('Design: ${brandDna['design_aesthetic']}', style: TextStyle(color: textMuted, fontSize: 13)),
+                          ],
+                          if (_uspAutoCalc != null && _uspAutoCalc!.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.green)),
+                              child: Row(children: [
+                                const Icon(Icons.calculate, color: Colors.green, size: 16),
+                                const SizedBox(width: 8),
+                                Text('USP auto-calculated from MRP: $_uspAutoCalc', style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 13)),
+                              ]),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
-                if (_showLabel) ...[
-                  SizedBox(height: 16),
+                  // Side tabs
+                  if (sides.length > 1 && _sideTabController != null) ...[
+                    TabBar(
+                      controller: _sideTabController,
+                      isScrollable: true,
+                      labelColor: Colors.greenAccent,
+                      unselectedLabelColor: textMuted,
+                      indicatorColor: Colors.greenAccent,
+                      onTap: (i) => setState(() => _selectedSideIndex = i),
+                      tabs: sides.asMap().entries.map((e) => Tab(text: e.value['side_name'] ?? 'Side ${e.key + 1}')).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Selected side label
+                  if (sides.isNotEmpty)
+                    _buildGeneratedLabelCard(
+                      sides[_selectedSideIndex] as Map<String, dynamic>,
+                      brandDna as Map<String, dynamic>,
+                      theme,
+                    ),
+
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton.icon(
-                        onPressed: () {},
-                        icon: Icon(Icons.code, color: Colors.greenAccent),
-                        label: Text('View Generated SVG Code', style: TextStyle(color: Colors.greenAccent)),
+                        onPressed: _resetForm,
+                        icon: Icon(Icons.refresh, color: textMuted),
+                        label: Text('Regenerate', style: TextStyle(color: textMuted)),
                       ),
-                      SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-                        onPressed: _isExporting ? null : _exportLabel,
-                        icon: _isExporting 
-                            ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : Icon(Icons.download, color: Colors.white),
-                        label: Text('Export Label Ready for Print', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      )
                     ],
-                  )
-                ]
+                  ),
+                ],
               ],
             ),
           ),
@@ -1253,35 +1343,49 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
       ],
     );
   }
-}
-class _ProfileScreen extends StatelessWidget {
-  const _ProfileScreen({Key? key}) : super(key: key);
 
+  Widget _colorChip(String hex, String label) {
+    Color color;
+    try {
+      final h = hex.replaceAll('#', '');
+      color = Color(int.parse('FF$h', radix: 16));
+    } catch (_) {
+      color = Colors.grey;
+    }
+    return Row(children: [
+      Container(width: 20, height: 20, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.black12))),
+      const SizedBox(width: 6),
+      Text('$label ($hex)', style: const TextStyle(fontSize: 12)),
+    ]);
+  }
+}
+
+class _ProfileScreen extends StatelessWidget {
+  const _ProfileScreen();
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: Text('Manufacturer Profile Screen', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 24)),
-    );
+    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
+    return Center(child: Text('Manufacturer Profile', style: TextStyle(color: textColor, fontSize: 24)));
   }
 }
 
 class _LogoutScreen extends StatelessWidget {
-  const _LogoutScreen({Key? key}) : super(key: key);
-
+  const _LogoutScreen();
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('Terminate Manufacturer Session?', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 24)),
-          SizedBox(height: 24),
+          Text('Terminate Manufacturer Session?', style: TextStyle(color: textColor, fontSize: 22)),
+          const SizedBox(height: 24),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
             onPressed: () => Navigator.pop(context),
-            child: Text('Confirm Logout', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+            child: Text('Confirm Logout', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
