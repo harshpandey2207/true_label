@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/report_viewer.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api_service.dart';
 
 class ManufacturerDashboard extends StatefulWidget {
@@ -929,6 +930,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
         _isGenerating = false;
         _labelData = result['label_data'];
         _uspAutoCalc = result['usp_auto_calculated'];
+        _errorMessage = 'Powered by ' + (result['model_used'] ?? 'AI'); // Hack to show model in UI easily
         _selectedSideIndex = 0;
       });
     } else {
@@ -974,16 +976,9 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
   }
 
   Widget _buildGeneratedLabelCard(Map<String, dynamic> side, Map<String, dynamic> brandDna, ThemeData theme) {
-    final primaryColor = _parseColor(brandDna['primary_color'] ?? '#1B4332');
-    final accentColor = _parseColor(brandDna['accent_color'] ?? '#52B788');
-    final header = side['header'] as Map? ?? {};
-    final bodySections = side['body_sections'] as List? ?? [];
-    final declarations = side['compliance_declarations'] as Map? ?? {};
-    final brandName = header['brand_name'] ?? _productNameController.text;
-    final tagline = header['tagline'] ?? '';
-    final logoDesc = header['logo_description'] ?? '';
-    final layoutDesc = side['layout_description'] ?? '';
-
+    final svgCode = side['svg_code'] as String? ?? '';
+    final sideName = side['side_name'] ?? 'Generated Label';
+    
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -995,114 +990,38 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header / Brand Section
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
-            decoration: BoxDecoration(
-              color: primaryColor,
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: const BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.only(topLeft: Radius.circular(10), topRight: Radius.circular(10)),
             ),
-            child: Column(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                if (logoDesc.isNotEmpty) ...[
-                  Icon(Icons.auto_awesome, size: 40, color: accentColor),
-                  const SizedBox(height: 8),
-                ],
-                Text(
-                  brandName.toUpperCase(),
-                  style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold, letterSpacing: 2),
-                  textAlign: TextAlign.center,
-                ),
-                if (tagline.isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(tagline, style: TextStyle(color: accentColor, fontSize: 13, letterSpacing: 1), textAlign: TextAlign.center),
-                ],
-                if (layoutDesc.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(4)),
-                    child: Text(layoutDesc, style: const TextStyle(color: Colors.white70, fontSize: 11), textAlign: TextAlign.center),
-                  ),
-                ],
+                Text(sideName.toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const Icon(Icons.code, color: Colors.greenAccent, size: 20),
               ],
             ),
           ),
-
-          // Body Sections (product description etc.)
-          if (bodySections.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: bodySections.map<Widget>((s) {
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if ((s['section_title'] ?? '').isNotEmpty)
-                          Text(s['section_title'], style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 13)),
-                        if ((s['content'] ?? '').isNotEmpty)
-                          Text(s['content'], style: const TextStyle(color: Colors.black54, fontSize: 12)),
-                      ],
-                    ),
-                  );
-                }).toList(),
+          if (svgCode.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              // We use flutter_svg to render the raw SVG generated by Llama Vision
+              child: SvgPicture.string(
+                svgCode,
+                fit: BoxFit.contain,
+                width: double.infinity,
+                placeholderBuilder: (BuildContext context) => Container(
+                    padding: const EdgeInsets.all(30.0),
+                    child: const CircularProgressIndicator()),
               ),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.all(32.0),
+              child: Center(child: Text("AI did not return valid SVG code for this side.", style: TextStyle(color: Colors.red))),
             ),
-
-          // Legal Metrology Declarations
-          Container(
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade50,
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  const Icon(Icons.verified, color: Colors.green, size: 16),
-                  const SizedBox(width: 6),
-                  const Text('LEGAL METROLOGY DECLARATIONS', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w800, fontSize: 13)),
-                ]),
-                const Divider(height: 16),
-                ...declarations.entries.where((e) => (e.value ?? '').toString().isNotEmpty).map((e) {
-                  final isUsp = e.key.toLowerCase() == 'usp';
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: Text('${e.key.toUpperCase().replaceAll('_',' ')}:', style: const TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w600))),
-                        Text(
-                          isUsp && _uspAutoCalc != null && _uspAutoCalc!.isNotEmpty ? _uspAutoCalc! : e.value.toString(),
-                          style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-                if (_uspAutoCalc != null && _uspAutoCalc!.isNotEmpty && !declarations.containsKey('usp')) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('USP (AUTO-CALC):', style: TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w600)),
-                        Text(_uspAutoCalc!, style: const TextStyle(color: Colors.black87, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ],
-                const Divider(height: 12),
-                Text(side['rule7_note'] ?? 'Rule 7 PCR 2011: Minimum font height verified', style: TextStyle(color: Colors.green.shade700, fontSize: 10)),
-              ],
-            ),
-          ),
         ],
       ),
     );
