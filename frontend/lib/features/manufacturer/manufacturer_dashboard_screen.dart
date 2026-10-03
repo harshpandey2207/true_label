@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme_provider.dart';
 import 'package:sidebarx/sidebarx.dart';
-import '../admin/mock_data.dart';
-import 'dart:ui' as ui;
-import 'package:flutter/rendering.dart';
-import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import '../../core/report_viewer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api_service.dart';
 import '../../core/svg_export.dart';
+import 'manufacturer_workspace_screens.dart';
 
 class ManufacturerDashboard extends StatefulWidget {
   const ManufacturerDashboard({super.key});
@@ -24,8 +22,6 @@ class _ManufacturerDashboardState extends State<ManufacturerDashboard> {
 
   Widget _buildSidebar(BuildContext context) {
     final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
     return SidebarX(
       controller: _controller,
       theme: SidebarXTheme(
@@ -44,11 +40,12 @@ class _ManufacturerDashboardState extends State<ManufacturerDashboard> {
         SidebarXItem(icon: Icons.dashboard_outlined, label: 'Workspace Overview'),
         SidebarXItem(icon: Icons.business_center, label: 'Enterprise Registry'),
         SidebarXItem(icon: Icons.folder_shared, label: 'Audit & Reports'),
-        SidebarXItem(icon: Icons.receipt_long, label: 'Penalty Demo'),
-        SidebarXItem(icon: Icons.mark_email_unread, label: 'Notice Workflow Demo'),
+        SidebarXItem(icon: Icons.receipt_long, label: 'Billing & Payments'),
+        SidebarXItem(icon: Icons.mark_email_unread, label: 'Review Notes'),
         SidebarXItem(icon: Icons.auto_awesome, label: 'Label Draft Studio'),
-        SidebarXItem(icon: Icons.person, label: 'Manufacturer Profile'),
-        SidebarXItem(icon: Icons.logout, label: 'Back to role selection'),
+        SidebarXItem(icon: Icons.layers_outlined, label: 'Saved Label Drafts'),
+        SidebarXItem(icon: Icons.person, label: 'Business Profile'),
+        SidebarXItem(icon: Icons.logout, label: 'Log out'),
       ],
     );
   }
@@ -56,8 +53,6 @@ class _ManufacturerDashboardState extends State<ManufacturerDashboard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
     final isMobile = MediaQuery.of(context).size.width < 600;
 
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -66,7 +61,7 @@ class _ManufacturerDashboardState extends State<ManufacturerDashboard> {
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: theme.cardColor,
-        title: Text('Manufacturer Portal', style: theme.textTheme.titleLarge?.copyWith(fontSize: 18) ?? TextStyle(fontSize: 18)),
+        title: Text('Business Owner Workspace', style: theme.textTheme.titleLarge?.copyWith(fontSize: 18) ?? TextStyle(fontSize: 18)),
         iconTheme: theme.iconTheme,
         automaticallyImplyLeading: isMobile,
         actions: [
@@ -95,7 +90,7 @@ class _ManufacturerDashboardState extends State<ManufacturerDashboard> {
 }
 
 class _ManufacturerScreensRouter extends StatefulWidget {
-  const _ManufacturerScreensRouter({super.key, required this.controller});
+  const _ManufacturerScreensRouter({required this.controller});
   final SidebarXController controller;
 
   @override
@@ -106,6 +101,8 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
   String _missingTagsForGenerator = "";
   Map<String, String> _scannedTagValuesForGenerator = {};
   String _generatorCategory = 'General Packaged Commodity';
+  List<XFile> _scannedImagesForGenerator = const [];
+  int? _scanIdForGenerator;
 
   @override
   Widget build(BuildContext context) {
@@ -115,27 +112,32 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
       builder: (context, child) {
         switch (widget.controller.selectedIndex) {
           case 0: return _BusinessOwnerScannerScreen(
-            onNavigateToGenerator: (missingTags, tagValues, category) {
+            onNavigateToGenerator: (missingTags, tagValues, category, images, scanId) {
               setState(() {
                 _missingTagsForGenerator = missingTags;
                 _scannedTagValuesForGenerator = tagValues;
                 _generatorCategory = category;
+                _scannedImagesForGenerator = List<XFile>.from(images);
+                _scanIdForGenerator = scanId;
               });
               widget.controller.selectIndex(6); // Switch to AI Label Generator
             },
           );
-          case 1: return _ManufacturerOverviewScreen();
-          case 2: return _EnterpriseRegistryScreen();
-          case 3: return _BusinessOwnerRepositoryScreen();
-          case 4: return _StatutoryFinesScreen();
-          case 5: return _LegalNoticesScreen();
+          case 1: return const WorkspaceOverviewScreen();
+          case 2: return const WorkspaceRegistryScreen();
+          case 3: return const WorkspaceReportsScreen();
+          case 4: return const WorkspaceBillingScreen();
+          case 5: return const WorkspaceNotesScreen();
           case 6: return _AILabelGeneratorScreen(
             initialMissingTags: _missingTagsForGenerator,
             initialTagValues: _scannedTagValuesForGenerator,
             initialCategory: _generatorCategory,
+            initialReferenceImages: _scannedImagesForGenerator,
+            sourceScanId: _scanIdForGenerator,
           );
-          case 7: return Center(child: Text('Manufacturer Profile'));
-          case 8: return Center(child: Text('Logout'));
+          case 7: return const WorkspaceLabelDraftsScreen();
+          case 8: return const WorkspaceProfileScreen();
+          case 9: return const WorkspaceLogoutScreen();
           default: return Center(child: Text('Screen not found', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)));
         }
       },
@@ -145,8 +147,8 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
 
 // --- 1. PRE-MARKET SCANNER WITH CATEGORY SELECTOR ---
 class _BusinessOwnerScannerScreen extends StatefulWidget {
-  final Function(String missingTags, Map<String, String> tagValues, String category)? onNavigateToGenerator;
-  const _BusinessOwnerScannerScreen({super.key, this.onNavigateToGenerator});
+  final Function(String missingTags, Map<String, String> tagValues, String category, List<XFile> images, int? scanId)? onNavigateToGenerator;
+  const _BusinessOwnerScannerScreen({this.onNavigateToGenerator});
 
   @override
   __BusinessOwnerScannerScreenState createState() => __BusinessOwnerScannerScreenState();
@@ -154,12 +156,13 @@ class _BusinessOwnerScannerScreen extends StatefulWidget {
 
 class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScreen> {
   int _scanState = 0; 
-  String _processingText = "Preparing local text recognition...";
+  String _processingText = "Preparing text recognition...";
   String _selectedCategory = 'General Packaged Commodity';
   
   final List<XFile> _capturedImages = []; 
   List<dynamic>? _analysisResults; 
   bool _overallCompliance = false;
+  int? _scanId;
   final ImagePicker _picker = ImagePicker();
 
   final List<String> _productCategories = [
@@ -229,6 +232,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
         setState(() {
           _analysisResults = result['results'];
           _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'NO_FLAGS');
+          _scanId = int.tryParse(result['scan_id']?.toString() ?? '');
           _scanState = 2;
         });
       } else {
@@ -251,8 +255,49 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
     setState(() {
       _scanState = 0;
       _analysisResults = null;
+      _scanId = null;
       _capturedImages.clear();
     });
+  }
+
+  Future<void> _showCurrentScanReport() async {
+    if (_analysisResults == null) return;
+    final notes = StringBuffer('Category: $_selectedCategory\n\n');
+    for (var index = 0; index < _analysisResults!.length; index++) {
+      final result = Map<String, dynamic>.from(_analysisResults![index] as Map);
+      final analysis = Map<String, dynamic>.from((result['analysis'] as Map?) ?? const {});
+      notes.writeln('${result['filename'] ?? 'Package side ${index + 1}'}');
+      for (final raw in (analysis['declarations'] as List? ?? const [])) {
+        final declaration = Map<String, dynamic>.from(raw as Map);
+        final tag = declaration['tag']?.toString() ?? 'Declaration';
+        if (tag.toUpperCase() == 'GENERAL') continue;
+        final text = declaration['text']?.toString() ?? '';
+        final confidence = declaration['confidence'] as num?;
+        final confidenceText = confidence == null ? 'OCR confidence unavailable' : '${(confidence.toDouble() * 100).toStringAsFixed(0)}% OCR confidence';
+        final status = declaration['finding_status'] == 'FLAGGED' || declaration['is_compliant'] == false ? 'flagged for review' : 'detected; not fully validated';
+        notes.writeln('• $tag: $text — $status ($confidenceText)');
+        final message = declaration['message']?.toString();
+        if (message != null && message.isNotEmpty) notes.writeln('  $message');
+      }
+      final missing = (analysis['missing_tags'] as List? ?? const []).map((value) => value.toString()).toList();
+      if (missing.isNotEmpty) notes.writeln('Not detected: ${missing.join(', ')}');
+      for (final warning in (analysis['warnings'] as List? ?? const [])) {
+        notes.writeln('Review note: $warning');
+      }
+      notes.writeln();
+    }
+    final evidence = await Future.wait(_capturedImages.map((image) => image.readAsBytes()));
+    final firstAnalysis = _analysisResults!.isEmpty ? const <String, dynamic>{} : Map<String, dynamic>.from((_analysisResults!.first as Map)['analysis'] as Map);
+    if (!mounted) return;
+    ReportViewer.showPdfDialog(
+      context: context,
+      reportId: _scanId == null ? 'SCAN-${DateTime.now().millisecondsSinceEpoch}' : 'SCAN-$_scanId',
+      product: '$_selectedCategory package',
+      findingsOrNotes: notes.toString(),
+      noFlagsDetected: _overallCompliance,
+      analysisMethod: firstAnalysis['ocr_engine']?.toString() == 'paddle' ? 'PaddleOCR running locally' : 'OCR.Space service (images sent for text recognition)',
+      proofImages: evidence,
+    );
   }
 
   @override
@@ -272,7 +317,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
               IconButton(
                 icon: Icon(Icons.refresh, color: textMuted),
                 onPressed: _resetScanner,
-                tooltip: "New Scan",
+                tooltip: "Clear and start a new scan",
               )
           ],
         ),
@@ -330,6 +375,9 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   SizedBox(height: 8),
                   Text('Upload clear, straight-on photos of the front, back and other package sides. Text-size values are rough estimates and are not used to determine scan status.',
                     textAlign: TextAlign.center, style: TextStyle(color: textMuted, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  Text('This resource-constrained setup uses OCR.Space for text recognition and sends selected package photos to that service. Configure OCR_SPACE_API_KEY on the backend. PaddleOCR is available as a local open-source option on a host with more memory.',
+                    textAlign: TextAlign.center, style: TextStyle(color: textMuted, fontSize: 12)),
                   SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -368,16 +416,19 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   scrollDirection: Axis.horizontal,
                   itemCount: _capturedImages.length,
                   itemBuilder: (context, index) {
-                    return Container(
-                      margin: EdgeInsets.only(right: 12),
-                      width: 100,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.greenAccent),
-                        image: DecorationImage(
-                          image: NetworkImage(_capturedImages[index].path),
-                          fit: BoxFit.cover,
+                    return FutureBuilder<Uint8List>(
+                      future: _capturedImages[index].readAsBytes(),
+                      builder: (context, snapshot) => Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        width: 100,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.greenAccent),
                         ),
+                        clipBehavior: Clip.antiAlias,
+                        child: snapshot.hasData
+                            ? Image.memory(snapshot.data!, fit: BoxFit.cover)
+                            : const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                       ),
                     );
                   },
@@ -414,7 +465,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
             SizedBox(height: 32),
             Text(_processingText, style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold)),
             SizedBox(height: 16),
-            Text("Extracting spatial OCR geometries...", style: TextStyle(color: Colors.greenAccent, fontSize: 14)),
+            Text("Reading package declarations. Images may be processed by the configured OCR service.", textAlign: TextAlign.center, style: TextStyle(color: Colors.greenAccent, fontSize: 14)),
           ],
         ),
       ),
@@ -462,8 +513,8 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   SizedBox(height: 8),
                   Text(
                     _overallCompliance 
-                        ? 'The prototype screening found no flags in its selected checks. Text-size values are rough estimates and are not used to determine status. Review current requirements before relying on this result.'
-                        : 'Some declarations were not found or need review. Text-size values are rough estimates; check the source images, current requirements and findings below.',
+                  ? 'The selected automated checks did not flag an issue in the submitted images. This screening is not a legal determination; review declarations and applicable requirements before relying on it.'
+                        : 'Some declarations were not detected or need review. Check the source images, current requirements and findings below.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: textMuted, fontSize: 14),
                   ),
@@ -487,7 +538,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                                 }
                               }
                             }
-                            widget.onNavigateToGenerator!(missingTagsString, tagValues, _selectedCategory);
+                            widget.onNavigateToGenerator!(missingTagsString, tagValues, _selectedCategory, List<XFile>.from(_capturedImages), _scanId);
                           }
                         },
                         icon: Icon(Icons.auto_awesome, color: Colors.white),
@@ -499,7 +550,17 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
               ),
             ),
             SizedBox(height: 24),
-            Text('Detailed Image Reports', style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text('Screening report', style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold))),
+                OutlinedButton.icon(
+                  onPressed: _showCurrentScanReport,
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Export report'),
+                ),
+              ],
+            ),
             SizedBox(height: 16),
             
             ListView.builder(
@@ -528,18 +589,34 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Prototype screening findings — verify rule applicability:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
+                            Text('Automated screening findings — verify rule applicability:', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
                               SizedBox(height: 12),
                               
                               // 1. Show Detected Mandatory Rules
                               if (analysis['declarations'] != null)
                                 ...((analysis['declarations'] as List).where((d) => d['tag'] != 'GENERAL').map((d) {
+                                  final flagged = d['finding_status'] == 'FLAGGED' || d['is_compliant'] == false;
+                                  final accent = flagged ? Colors.deepOrange : theme.colorScheme.primary;
                                   return ListTile(
                                     contentPadding: EdgeInsets.zero,
-                                    leading: Icon(d['is_compliant'] ? Icons.check_circle_outline : Icons.error_outline, 
-                                        color: d['is_compliant'] ? Colors.green : Colors.red),
-                                    title: Text(d['tag'], style: TextStyle(color: d['is_compliant'] ? Colors.greenAccent : Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    subtitle: Text("\n", style: TextStyle(color: textMuted, fontSize: 12)),
+                                    leading: Icon(flagged ? Icons.warning_amber_outlined : Icons.subject, color: accent),
+                                    title: Text(d['tag']?.toString() ?? 'Declaration', style: TextStyle(color: accent, fontSize: 14, fontWeight: FontWeight.bold)),
+                                    subtitle: Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(d['text']?.toString() ?? 'Text detected', style: TextStyle(color: textColor, fontSize: 13)),
+                                          Text(flagged ? 'Automated check flagged this text' : 'Detected; full rule applicability and content were not evaluated', style: TextStyle(color: flagged ? accent : textMuted, fontSize: 11)),
+                                          if ((d['message']?.toString() ?? '').isNotEmpty)
+                                            Padding(
+                                              padding: const EdgeInsets.only(top: 4),
+                                              child: Text(d['message'].toString(), style: TextStyle(color: textMuted, fontSize: 12)),
+                                            ),
+                                          Text(d['confidence'] is num ? 'OCR confidence: ${(((d['confidence'] as num).toDouble()) * 100).toStringAsFixed(0)}%' : 'OCR confidence not supplied by this engine', style: TextStyle(color: textMuted, fontSize: 11)),
+                                        ],
+                                      ),
+                                    ),
                                   );
                                 }).toList()),
                                 
@@ -550,7 +627,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                                     contentPadding: EdgeInsets.zero,
                                     leading: Icon(Icons.cancel, color: Colors.red),
                                     title: Text(t.toString(), style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    subtitle: Text("Not detected in the selected prototype rule set. Verify against the package and applicable rules.", style: TextStyle(color: textMuted, fontSize: 12)),
+                    subtitle: Text("Not detected in the submitted images. Check the package directly and confirm whether this declaration applies.", style: TextStyle(color: textMuted, fontSize: 12)),
                                   );
                                 }).toList()),
                           ],
@@ -561,292 +638,18 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                 );
               },
             ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _resetScanner,
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('Clear results and start a new scan'),
+              ),
+            ),
           ],
         ),
       ),
-    );
-  }
-}
-
-// --- 2. WORKSPACE OVERVIEW (Dashboard) ---
-class _ManufacturerOverviewScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    final manufacturerViolations = mockViolations.where((v) => v['product'].toString().contains('AquaPure')).toList();
-    
-    final int registeredSKUs = 124; 
-    final int activeInfractions = manufacturerViolations.length; 
-    final int compliantProducts = registeredSKUs - activeInfractions;
-
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Manufacturer Operations Workspace (Sample)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 6),
-          Text('Static demonstration numbers; product registry and audit records are not connected.', style: TextStyle(color: textMuted)),
-          SizedBox(height: 24),
-          _buildStatCard('Registered SKUs', registeredSKUs.toString(), Colors.blueAccent, theme),
-          SizedBox(height: 12),
-          _buildStatCard('Compliant Products', compliantProducts.toString(), Colors.greenAccent, theme),
-          SizedBox(height: 12),
-          _buildStatCard('Active Infractions', activeInfractions.toString(), Colors.redAccent, theme),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatCard(String title, String value, Color color, ThemeData theme) {
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    return Card(
-      color: theme.cardColor,
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: SizedBox(
-          width: double.infinity,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 16)),
-              SizedBox(height: 12),
-              Text(value, style: TextStyle(color: color, fontSize: 32, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// --- 3. ENTERPRISE REGISTRY (Profile) ---
-class _EnterpriseRegistryScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Enterprise & Compliance Registry (Sample)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
-        SizedBox(height: 8),
-        Text('Demo profile data only. No business identity, licence or product registry is connected.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-        SizedBox(height: 24),
-        Expanded(
-          child: ListView(
-            children: [
-              Card(
-                color: theme.cardColor,
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Business Credentials & Identifiers', style: TextStyle(color: Colors.greenAccent, fontSize: 20, fontWeight: FontWeight.bold)),
-                      Divider(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, height: 24),
-                      _buildRegistryRow('Legal Entity Name:', 'AquaPure Industries Ltd.', theme),
-                      _buildRegistryRow('GSTIN Number:', '24AABCA1234F1Z5', theme),
-                      _buildRegistryRow('Legal Metrology Packer License:', 'LMP-MH-2026-9921', theme),
-                      _buildRegistryRow('Registered District Office:', 'Indore Sector-4, Madhya Pradesh', theme),
-                    ],
-                  ),
-                ),
-              ),
-              SizedBox(height: 16),
-              Card(
-                color: theme.cardColor,
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Registered Active Product SKUs', style: TextStyle(color: Colors.blueAccent, fontSize: 20, fontWeight: FontWeight.bold)),
-                      Divider(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, height: 24),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.inventory, color: Colors.greenAccent),
-                        title: Text('AquaPure Packaged Drinking Water 1L', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                        subtitle: Text('Sample SKU ID: SKU-8841 | No certification is connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-                        trailing: Text('Active', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
-                      ),
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.inventory, color: Colors.greenAccent),
-                        title: Text('AquaPure Mineral Water 500ml', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                        subtitle: Text('Sample SKU ID: SKU-8842 | No certification is connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-                        trailing: Text('Active', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRegistryRow(String label, String value, ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 16)),
-          Text(value, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
-          SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-}
-
-// --- 4. AUDIT & REPORTS ---
-class _BusinessOwnerRepositoryScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    final manufacturerLogs = auditLogs.where((log) => 
-      log['action']!.contains('AquaPure') || log['action']!.contains('SKU-100')
-    ).toList();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Sample Audit & Reports', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        Text('Static sample records. A report preview is an automated screening summary, not an official document.', style: TextStyle(color: textMuted)),
-        SizedBox(height: 24),
-        Expanded(
-          child: ListView.builder(
-            itemCount: manufacturerLogs.length,
-            itemBuilder: (context, index) {
-              final log = manufacturerLogs[index];
-              final isFlagged = log['status'].toString().toLowerCase().contains('flag');
-              return ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(isFlagged ? Icons.warning : Icons.check_circle, color: isFlagged ? Colors.redAccent : Colors.greenAccent),
-                title: Text('Internal Audit Scan #${1024 + index}', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                subtitle: Text('Status: ${log['status']} Ledger Record', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-                trailing: IconButton(
-                  icon: Icon(Icons.picture_as_pdf, color: Colors.blueAccent),
-                  tooltip: 'View Report PDF',
-                  onPressed: () {
-                    ReportViewer.showPdfDialog(context: context, reportId: 'AUDIT-${1024 + index}', product: 'AquaPure 1L Water Bottle', findingsOrNotes: isFlagged ? 'Sample: MRP field needs review.' : 'Sample: no flags in the configured checks.', noFlagsDetected: !isFlagged);
-                  },
-                ),
-              );
-            },
-          ),
-        )
-      ],
-    );
-  }
-}
-
-// --- 5. STATUTORY FINES ---
-class _StatutoryFinesScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Penalty Workflow Demo', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
-        SizedBox(height: 24),
-        Text('The example record below is sample data. This screen is not connected to a regulator, payment service or official notice system.', style: TextStyle(color: textMuted)),
-        SizedBox(height: 12),
-        Card(
-          color: const Color(0xFF2A1616),
-          shape: RoundedRectangleBorder(side: BorderSide(color: Colors.redAccent, width: 1), borderRadius: BorderRadius.circular(8)),
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(child: Text('SAMPLE: Potential missing MRP field', style: TextStyle(color: Colors.redAccent, fontSize: 20, fontWeight: FontWeight.bold))),
-                  ],
-                ),
-                SizedBox(height: 4),
-                Text('Sample record', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-                SizedBox(height: 12),
-                Text('Example product: AquaPure 1L\nExample amount: ₹ 2,000', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, height: 1.5)),
-                SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, padding: const EdgeInsets.symmetric(vertical: 12)),
-                    onPressed: null,
-                    icon: Icon(Icons.payment, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-                    label: Text('Payment service not connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-                SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(side: BorderSide(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87), padding: const EdgeInsets.symmetric(vertical: 12)),
-                    onPressed: null,
-                    icon: Icon(Icons.download, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-                    label: Text('Official PDF unavailable', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
-                  ),
-                )
-              ],
-            ),
-          ),
-        )
-      ],
-    );
-  }
-}
-
-// --- 6. ACTIVE LEGAL NOTICES ---
-class _LegalNoticesScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    final textMuted = theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Notice Workflow Demo', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 6),
-        Text('The example below is not an issued notice and is not connected to a regulator.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-        SizedBox(height: 24),
-        Expanded(
-          child: Card(
-            color: theme.cardColor,
-            child: ListView(
-              padding: const EdgeInsets.all(20),
-              children: [
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.warning, color: Colors.orangeAccent),
-                  title: Text('Sample notice: Packaging verification', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontWeight: FontWeight.bold)),
-                  subtitle: Padding(
-                    padding: EdgeInsets.only(top: 8.0),
-                    child: Text('This example shows where a manual review reminder could appear. No case or batch record is connected.', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
@@ -856,11 +659,14 @@ class _AILabelGeneratorScreen extends StatefulWidget {
   final String? initialMissingTags;
   final Map<String, String> initialTagValues;
   final String initialCategory;
+  final List<XFile> initialReferenceImages;
+  final int? sourceScanId;
   const _AILabelGeneratorScreen({
-    super.key,
     this.initialMissingTags,
     this.initialTagValues = const {},
     this.initialCategory = 'General Packaged Commodity',
+    this.initialReferenceImages = const [],
+    this.sourceScanId,
   });
 
   @override
@@ -894,6 +700,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
   void initState() {
     super.initState();
     _selectedCategory = widget.initialCategory;
+    _referenceImages.addAll(widget.initialReferenceImages.take(6));
     if (widget.initialMissingTags != null && widget.initialMissingTags!.isNotEmpty) {
       _missingTags = widget.initialMissingTags!.split(',').map((e) => e.trim()).where((t) => t.isNotEmpty).toList();
     }
@@ -915,8 +722,12 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
   }
 
   Future<void> _pickImages() async {
-    final List<XFile> photos = await _picker.pickMultiImage(imageQuality: 80);
-    if (photos.isNotEmpty) {
+    final List<XFile> photos = await _picker.pickMultiImage(
+      imageQuality: 78,
+      maxWidth: 1600,
+      maxHeight: 1600,
+    );
+    if (mounted && photos.isNotEmpty) {
       setState(() {
         _referenceImages.clear();
         _referenceImages.addAll(photos.take(6));
@@ -1028,6 +839,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
       missingTagValues: tagValues,
       additionalDetails: _additionalDetailsController.text.trim(),
       sideCount: _sideCount,
+      sourceScanId: widget.sourceScanId,
     );
 
     if (!mounted) return;
@@ -1057,17 +869,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
       _errorMessage = null;
       _engineInfo = null;
       _warnings = [];
-      _referenceImages.clear();
     });
-  }
-
-  Color _parseColor(String hex) {
-    try {
-      final h = hex.replaceAll('#', '');
-      return Color(int.parse('FF$h', radix: 16));
-    } catch (_) {
-      return const Color(0xFF1B4332);
-    }
   }
 
   Widget _buildInputField(String label, TextEditingController controller, String hint, ThemeData theme, {int maxLines = 1}) {
@@ -1118,14 +920,12 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
           if (svgCode.isNotEmpty)
             Container(
               padding: const EdgeInsets.all(16),
-              // The API returns locally-rendered SVG using escaped user copy.
+              height: 600,
               child: SvgPicture.string(
                 svgCode,
                 fit: BoxFit.contain,
-                width: double.infinity,
-                placeholderBuilder: (BuildContext context) => Container(
-                    padding: const EdgeInsets.all(30.0),
-                    child: const CircularProgressIndicator()),
+                placeholderBuilder: (BuildContext context) =>
+                    const Center(child: CircularProgressIndicator()),
               ),
             )
           else
@@ -1203,25 +1003,34 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                                   ? Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                                       const Icon(Icons.check_circle, color: Colors.greenAccent, size: 32),
                                       const SizedBox(height: 8),
-                                      Text('${_referenceImages.length} image(s) selected — one draft will be made per image', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                                      Text('${_referenceImages.length} reference image(s) — one draft will be made per side', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
                                       const SizedBox(height: 4),
                                       Text(_referenceImages.map((image) => image.name).join('  •  '), maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: textMuted, fontSize: 11)),
                                     ])
                                   : Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                                       Icon(Icons.cloud_upload_outlined, color: textMuted, size: 32),
                                       const SizedBox(height: 8),
-                                      Text('Tap to upload front, back or other side photos', style: TextStyle(color: textMuted)),
+                                      Text('Add optional front, back or other side photos', style: TextStyle(color: textMuted)),
                                       Text('Files named Front, Back, Left, Right, Top or Bottom keep those side names.', style: TextStyle(color: textMuted, fontSize: 12)),
                                     ]),
                               ),
                             ),
                           ),
+                          if (_referenceImages.isNotEmpty)
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () => setState(_referenceImages.clear),
+                                icon: const Icon(Icons.close),
+                                label: const Text('Remove reference photos'),
+                              ),
+                            ),
                           const SizedBox(height: 24),
 
                           Text('2. Product and package details', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 8),
                           DropdownButtonFormField<String>(
-                            value: _selectedCategory,
+                            initialValue: _selectedCategory,
                             decoration: const InputDecoration(labelText: 'Product category'),
                             items: const [
                               'General Packaged Commodity', 'Food & Beverages', 'Electronics & Appliances',
@@ -1245,7 +1054,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
 
                           Text('3. Declarations and product copy', style: TextStyle(color: Colors.greenAccent, fontSize: 14, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text('Scanner values are prefilled where detected. Missing fields are highlighted; enter the exact approved wording.', style: TextStyle(color: textMuted, fontSize: 12)),
+                          Text('Scanner values are prefilled where detected. Fields not detected by OCR are highlighted for review; enter the exact approved wording.', style: TextStyle(color: textMuted, fontSize: 12)),
                           const SizedBox(height: 12),
                           Wrap(
                             spacing: 12,
@@ -1256,7 +1065,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                                 .map((tag) => SizedBox(
                                   width: (MediaQuery.of(context).size.width / 2) - 48,
                                   child: _buildInputField(
-                                    _missingTags.any((missing) => missing.toLowerCase() == tag) ? 'Missing in scan: ${_fieldTitle(tag)}' : _fieldTitle(tag),
+                                    _missingTags.any((missing) => missing.toLowerCase() == tag) ? 'Not detected: ${_fieldTitle(tag)}' : _fieldTitle(tag),
                                     _labelValueControllers[tag]!,
                                     'Enter label text',
                                     theme,
@@ -1273,12 +1082,17 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                           const SizedBox(height: 8),
                           _buildInputField('Describe style and features to retain', _promptController, 'e.g. earthy green, minimal, reserve a logo/artwork space', theme, maxLines: 3),
                           const SizedBox(height: 8),
-                          Text('The local renderer uses the brief for simple style choices and can reserve an artwork box. It does not reproduce logos, photos or barcodes from the reference.', style: TextStyle(color: textMuted, fontSize: 12)),
+                          Text(
+                            _referenceImages.isEmpty
+                                ? 'Reference photos are optional. The brief and entered product details are enough to create a draft.'
+                                : 'Selected references are attached to the draft flow. Add more reference sides if needed; the renderer uses their colour palettes and side names.',
+                            style: TextStyle(color: textMuted, fontSize: 12),
+                          ),
                           const SizedBox(height: 24),
 
                           if (_referenceImages.isEmpty) ...[
                             DropdownButtonFormField<int>(
-                              value: _sideCount,
+                              initialValue: _sideCount,
                               decoration: const InputDecoration(labelText: 'Package sides to draft'),
                               items: const [2, 4, 6].map((count) => DropdownMenuItem(value: count, child: Text('$count sides'))).toList(),
                               onChanged: (count) => setState(() => _sideCount = count ?? 2),
@@ -1332,7 +1146,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Local style sample', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Reference-image palette', style: TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold, fontSize: 14)),
                           const SizedBox(height: 12),
                           Wrap(spacing: 12, runSpacing: 8, children: [
                             _colorChip(selectedSide['sampled_primary_color'] ?? brandDna['primary_color'] ?? '#1B4332', 'Primary'),
@@ -1416,7 +1230,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
                       TextButton.icon(
                         onPressed: _resetForm,
                         icon: Icon(Icons.refresh, color: textMuted),
-                        label: Text('Regenerate', style: TextStyle(color: textMuted)),
+                        label: Text('Edit draft', style: TextStyle(color: textMuted)),
                       ),
                     ],
                   ),
@@ -1442,38 +1256,5 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
       const SizedBox(width: 6),
       Text('$label ($hex)', style: const TextStyle(fontSize: 12)),
     ]);
-  }
-}
-
-class _ProfileScreen extends StatelessWidget {
-  const _ProfileScreen();
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    return Center(child: Text('Manufacturer Profile', style: TextStyle(color: textColor, fontSize: 24)));
-  }
-}
-
-class _LogoutScreen extends StatelessWidget {
-  const _LogoutScreen();
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textColor = theme.brightness == Brightness.dark ? Colors.white : Colors.black;
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('Terminate Manufacturer Session?', style: TextStyle(color: textColor, fontSize: 22)),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
-            onPressed: () => Navigator.pop(context),
-            child: Text('Confirm Logout', style: TextStyle(color: textColor, fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
   }
 }
