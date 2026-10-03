@@ -2,6 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.api.scan_routes import router as scan_router
 from backend.app.api.label_routes import router as label_router
+from backend.app.api.auth_routes import router as auth_router
+from backend.app.api.workspace_routes import router as workspace_router
+
 
 # Database imports
 from backend.app.db.database import SessionLocal, engine
@@ -39,3 +42,6 @@ def health_check():
 # Mount the routes with a clean prefix
 app.include_router(scan_router, prefix="/scan", tags=["Scan"])
 app.include_router(label_router, prefix="/label", tags=["Label Generator"])
+app.include_router(auth_router, prefix="/auth", tags=["Accounts"])
+app.include_router(workspace_router, prefix="/workspace", tags=["Workspace"])
+
