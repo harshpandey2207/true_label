@@ -1,0 +1,14 @@
+# Optional local OCR runtime. Keep this out of the Render container image when
+# its RAM/CPU limits require the OCR.Space API fallback.
+paddlepaddle==2.6.2
+paddleocr==2.9.1
+shapely==2.0.6
+pyclipper==1.3.0.post5
+python-bidi==0.4.2
+imgaug==0.4.0
+lmdb==1.5.1
+tqdm==4.67.1
+PyYAML==6.0.2
+attrdict==2.0.1
+scipy==1.11.4
+scikit-image==0.22.0
