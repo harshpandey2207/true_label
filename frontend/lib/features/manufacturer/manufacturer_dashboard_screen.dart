@@ -7,8 +7,9 @@ import '../../core/report_viewer.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api_service.dart';
-import '../../core/svg_export.dart';
 import 'manufacturer_workspace_screens.dart';
+import '../../core/svg_export.dart';
+
 
 class ManufacturerDashboard extends StatefulWidget {
   const ManufacturerDashboard({super.key});
@@ -123,11 +124,11 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
               widget.controller.selectIndex(6); // Switch to AI Label Generator
             },
           );
-          case 1: return const WorkspaceOverviewScreen();
-          case 2: return const WorkspaceRegistryScreen();
-          case 3: return const WorkspaceReportsScreen();
-          case 4: return const WorkspaceBillingScreen();
-          case 5: return const WorkspaceNotesScreen();
+          case 1: return WorkspaceOverviewScreen();
+          case 2: return WorkspaceRegistryScreen();
+          case 3: return WorkspaceReportsScreen();
+          case 4: return WorkspaceBillingScreen();
+          case 5: return WorkspaceNotesScreen();
           case 6: return _AILabelGeneratorScreen(
             initialMissingTags: _missingTagsForGenerator,
             initialTagValues: _scannedTagValuesForGenerator,
@@ -135,9 +136,9 @@ class _ManufacturerScreensRouterState extends State<_ManufacturerScreensRouter> 
             initialReferenceImages: _scannedImagesForGenerator,
             sourceScanId: _scanIdForGenerator,
           );
-          case 7: return const WorkspaceLabelDraftsScreen();
-          case 8: return const WorkspaceProfileScreen();
-          case 9: return const WorkspaceLogoutScreen();
+          
+          case 8: return WorkspaceProfileScreen();
+          case 9: return WorkspaceLogoutScreen();
           default: return Center(child: Text('Screen not found', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)));
         }
       },
@@ -295,7 +296,6 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
       product: '$_selectedCategory package',
       findingsOrNotes: notes.toString(),
       noFlagsDetected: _overallCompliance,
-      analysisMethod: firstAnalysis['ocr_engine']?.toString() == 'paddle' ? 'PaddleOCR running locally' : 'OCR.Space service (images sent for text recognition)',
       proofImages: evidence,
     );
   }
@@ -839,7 +839,6 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
       missingTagValues: tagValues,
       additionalDetails: _additionalDetailsController.text.trim(),
       sideCount: _sideCount,
-      sourceScanId: widget.sourceScanId,
     );
 
     if (!mounted) return;

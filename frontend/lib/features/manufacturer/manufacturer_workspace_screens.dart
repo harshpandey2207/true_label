@@ -299,7 +299,7 @@ class _WorkspaceReportsScreenState extends State<WorkspaceReportsScreen> {
       product: '${scan['category']} package',
       findingsOrNotes: _scanNotes(scan),
       noFlagsDetected: scan['status'] == 'NO_FLAGS',
-      analysisMethod: _scanMethod(scan),
+      
     );
   }
 

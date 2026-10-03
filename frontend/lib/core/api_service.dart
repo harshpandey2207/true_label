@@ -112,4 +112,87 @@ class ApiService {
       return {'success': false, 'error': 'Connection error: $e'};
     }
   }
+
+  static Map<String, dynamic>? currentUser;
+
+  static Future<Map<String, dynamic>> getJson(String path) async {
+    try {
+      final response = await http.get(Uri.parse(baseUrl + path), headers: _authHeaders).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      return {'status': 'ERROR', 'error': 'Backend error'};
+    } catch (e) {
+      return {'status': 'ERROR', 'error': 'Connection error: ' + e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> postJson(String path, Map<String, dynamic> body) async {
+    try {
+      final response = await http.post(
+        Uri.parse(baseUrl + path),
+        headers: {'Content-Type': 'application/json', ..._authHeaders},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200 || response.statusCode == 201) return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      return {'status': 'ERROR', 'error': 'Backend error'};
+    } catch (e) {
+      return {'status': 'ERROR', 'error': 'Connection error: ' + e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> delete(String path) async {
+    try {
+      final response = await http.delete(Uri.parse(baseUrl + path), headers: _authHeaders).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      return {'status': 'ERROR', 'error': 'Backend error'};
+    } catch (e) {
+      return {'status': 'ERROR', 'error': 'Connection error: ' + e.toString()};
+    }
+  }
+
+  static Future<void> signOut() async {
+    _sessionToken = null;
+    currentUser = null;
+  }
+
+  static String? _sessionToken;
+
+  static Map<String, String> get _authHeaders => _sessionToken == null
+      ? const <String, String>{}
+      : <String, String>{'Authorization': 'Bearer ' + _sessionToken!};
+
+  static Future<Map<String, dynamic>> _authRequest(String endpoint, Map<String, String> payload) async {
+    final response = await http.post(
+      Uri.parse(baseUrl + endpoint),
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: payload,
+    ).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 200) return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+    throw Exception('Authentication failed');
+  }
+
+  static Future<void> signIn({required String email, required String password}) async {
+    final session = await _authRequest('/auth/login', {'username': email, 'password': password});
+    _sessionToken = session['access_token']?.toString();
+    currentUser = Map<String, dynamic>.from(session['user'] as Map);
+  }
+
+  static Future<void> register({
+    required String name,
+    required String email,
+    required String password,
+    required String role,
+    required String organizationName,
+  }) async {
+    await _authRequest('/auth/register', {
+      'full_name': name,
+      'email': email,
+      'password': password,
+      'role': role,
+      'organization_name': organizationName,
+    });
+  }
+
+  static Future<void> initialize() async {
+  }
 }
