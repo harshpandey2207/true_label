@@ -97,12 +97,23 @@ async def generate_label(
     temp_dir = tempfile.mkdtemp()
     images_b64 = []
     try:
+        import cv2
+        import numpy as np
         for img in images:
-            temp_path = os.path.join(temp_dir, img.filename or "image.jpg")
-            with open(temp_path, "wb") as f:
-                f.write(await img.read())
-            with open(temp_path, "rb") as f:
-                images_b64.append(base64.b64encode(f.read()).decode("utf-8"))
+            # Read image bytes
+            file_bytes = np.frombuffer(await img.read(), np.uint8)
+            cv_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            
+            # Resize if too large (Groq has strict payload limits)
+            max_dim = 800
+            h, w = cv_img.shape[:2]
+            if max(h, w) > max_dim:
+                scale = max_dim / max(h, w)
+                cv_img = cv2.resize(cv_img, (int(w * scale), int(h * scale)))
+                
+            # Encode as JPEG with high compression to save base64 space
+            _, buffer = cv2.imencode('.jpg', cv_img, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
+            images_b64.append(base64.b64encode(buffer).decode("utf-8"))
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
