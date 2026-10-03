@@ -505,8 +505,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                                     leading: Icon(d['is_compliant'] ? Icons.check_circle_outline : Icons.error_outline, 
                                         color: d['is_compliant'] ? Colors.green : Colors.red),
                                     title: Text(d['tag'], style: TextStyle(color: d['is_compliant'] ? Colors.greenAccent : Colors.redAccent, fontSize: 14, fontWeight: FontWeight.bold)),
-                                    subtitle: Text("\
-", style: TextStyle(color: textMuted, fontSize: 12)),
+                                    subtitle: Text("\n", style: TextStyle(color: textMuted, fontSize: 12)),
                                   );
                                 }).toList()),
                                 
@@ -1252,6 +1251,40 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> {
           ),
         ),
       ],
+    );
+  }
+}
+class _ProfileScreen extends StatelessWidget {
+  const _ProfileScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Text('Manufacturer Profile Screen', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 24)),
+    );
+  }
+}
+
+class _LogoutScreen extends StatelessWidget {
+  const _LogoutScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text('Terminate Manufacturer Session?', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 24)),
+          SizedBox(height: 24),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16)),
+            onPressed: () => Navigator.pop(context),
+            child: Text('Confirm Logout', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
     );
   }
 }
