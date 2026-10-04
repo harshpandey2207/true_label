@@ -1,30 +1,11 @@
 import os
-# CRITICAL: Must be set BEFORE any paddle/paddleocr import.
-# PaddlePaddle 3.x has a PIR executor conflict with oneDNN on CPU that causes
-# NotImplementedError: ConvertPirAttribute2RuntimeAttribute
-# This disables the broken code path entirely and restores fast CPU inference.
-os.environ["FLAGS_use_mkldnn"] = "0"
-os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
-os.environ["FLAGS_new_executor_micro_batching"] = "0"
 
 import re
 from typing import Dict, Any
 
 
-_ocr = None
-_ocr_error = None
 
 
-def _get_local_ocr():
-    """Load the open-source OCR engine only when a scan is requested."""
-    global _ocr, _ocr_error
-    if _ocr is None and _ocr_error is None:
-        try:
-            from paddleocr import PaddleOCR
-            _ocr = PaddleOCR(use_angle_cls=False, lang="en", show_log=False)
-        except Exception as exc:
-            _ocr_error = str(exc)
-    return _ocr
 
 OINTMENT_RULES = [
     "mrp",
@@ -41,167 +22,244 @@ OINTMENT_RULES = [
 
 FIELD_MESSAGES = {
     "mrp": "Retail sale price must be declared inclusive of all taxes.",
-    "manufacturer": "Manufacturer, packer or importer details must be declared where applicable.",
+    "manufacturer": "Manufacturer/packer details must be declared.",
     "consumer_care": "Consumer complaint contact details must be present.",
     "net_quantity": "Net quantity must be declared using appropriate weight/volume units.",
     "batch_code": "Batch or lot identification must be declared.",
     "manufacturing_date": "Manufacturing or expiry date must be declared.",
-    "best_before_date": "Best-before or use-by declaration detected; review its wording and date.",
-    "expiry_date": "Expiry declaration detected; verify its wording and date.",
-    "fssai_license": "FSSAI licence or registration text detected; verify the number and applicability.",
-    "veg_non_veg_logo": "Food symbol wording detected; verify the required symbol directly on the package.",
-    "bis_mark": "BIS/ISI text detected; verify certification and applicability.",
-    "country_of_origin": "Country-of-origin text detected; verify the declaration and product origin.",
-    "model": "Model identification text detected; verify the value against the product.",
-    "serial_number": "Serial number text detected; verify the value against the product.",
-    "size": "Size declaration detected; verify the declared size and unit.",
-    "ingredients": "Ingredients text detected; review required ingredient and allergen disclosures.",
     "storage": "Storage instructions must be declared.",
     "language": "Declarations must be in English or Hindi.",
     "quantity_unit": "Quantity must use recognized units.",
     "no_misleading_quantity": "Quantity declaration must not be misleading."
 }
 
-def analyze_product_label(
-    image_path: str,
-    product_type: str = "ointment",
-    distance_mm: float = 300.0,
-    focal_length_px: float = 800.0,
-    db=None,
-    category_id: int = 1,
-    is_institutional: bool = False,
-    rule_33_gst_active: bool = False,
-    weight_under_10g: bool = False,
-    is_medical_device: bool = False
-) -> dict:
-    import base64
-    import json
-    import urllib.request
-    import urllib.error
-    import os
-    
-    groq_api_key = os.environ.get("GROQ_API_KEY", "").strip()
-    llama_api_key = os.environ.get("LLAMA_API_KEY", "").strip()
-    
-    if not groq_api_key and not llama_api_key:
-        return {"status": "ERROR", "declarations": [], "error": "GROQ_API_KEY is not set."}
-        
-    with open(image_path, "rb") as f:
-        img_b64 = base64.b64encode(f.read()).decode("utf-8")
-        
-    prompt = f"""Analyze this product package label for Legal Metrology compliance in India.
-    Category: {product_type}
-
-    Extract ALL visible compliance declarations (MRP, Net Quantity, Mfg Date, Expiry Date, Consumer Care, Manufacturer details, FSSAI, Batch Code, etc.).
-    For each declaration found, provide:
-    1. "text": The exact text seen on the label.
-    2. "tag": A standard tag (e.g. MRP, NET_QUANTITY, MANUFACTURING_DATE, EXPIRY_DATE, CONSUMER_CARE, MANUFACTURER, FSSAI_LICENSE, BATCH_CODE).
-    3. "box": Approximate bounding box as [[x1,y1], [x2,y1], [x2,y2], [x1,y2]] (use a generic box like [[10,10],[100,10],[100,20],[10,20]] if unsure, the frontend needs this format).
-    4. "height_mm": Estimate font height in mm (e.g. 1.5).
-    5. "is_compliant": true.
-
-    Return EXACTLY this JSON structure:
-    {{
-      "declarations": [
-        {{
-          "text": "Rs. 150.00",
-          "tag": "MRP",
-          "box": [[10,10], [50,10], [50,20], [10,20]],
-          "height_mm": 1.5,
-          "is_compliant": true,
-          "message": "Valid MRP format"
-        }}
-      ]
-    }}
-    Return only JSON. Do not include markdown formatting."""
-
-    url = "https://api.groq.com/openai/v1/chat/completions" if groq_api_key else "https://api.together.xyz/v1/chat/completions"
-    model = "llama-3.2-11b-vision-preview" if groq_api_key else "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo"
-    api_key = groq_api_key or llama_api_key
-
-    payload = json.dumps({
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
-                ]
-            }
-        ],
-        "max_tokens": 2000,
-        "temperature": 0.1
-    }).encode("utf-8")
-    
-    req = urllib.request.Request(url, data=payload, headers={
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }, method="POST")
-    
+def analyze_product_label(image_path: str, product_type: str = "ointment", distance_mm: float = 300.0, focal_length_px: float = 800.0, db=None, category_id: int = 1, is_institutional: bool = False, rule_33_gst_active: bool = False, weight_under_10g: bool = False, is_medical_device: bool = False) -> Dict[str, Any]:
+    from PIL import Image
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            result_text = data["choices"][0]["message"]["content"]
-    except urllib.error.HTTPError as e:
-        if e.code in (401, 403):
-            return {"status": "ERROR", "declarations": [], "error": "Invalid or expired GROQ_API_KEY on Render."}
-        return {"status": "ERROR", "declarations": [], "error": f"AI Error: {e}"}
+        with Image.open(image_path) as img:
+            orig_w, orig_h = img.size
+            h_img, w_img = orig_h, orig_w
+            
+            max_side = 500
+            scale = 1.0
+            if max(orig_h, orig_w) > max_side:
+                scale = max_side / max(orig_h, orig_w)
+                new_w, new_h = int(orig_w * scale), int(orig_h * scale)
+                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                img.save(image_path, format="JPEG")
+                h_img, w_img = new_h, new_w
     except Exception as e:
-        return {"status": "ERROR", "declarations": [], "error": f"AI Error: {e}"}
-        
+        return {"status": "ERROR", "declarations": [], "error": f"Could not read image file: {e}"}
+
+    parsed_lines = []
+
+    # Using OCR.space API
     try:
-        import re
-        json_match = re.search(r'\{[\s\S]*\}', result_text)
-        if json_match:
-            parsed = json.loads(json_match.group())
-            declarations = parsed.get("declarations", [])
-            for d in declarations:
-                d["finding_status"] = "DETECTED"
-                if "failure_reason" not in d:
-                    d["failure_reason"] = None
+        import requests
+        import base64
+        
+        with open(image_path, "rb") as image_file:
+            base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+            
+        payload = {
+            'base64Image': f"data:image/jpeg;base64,{base64_image}",
+            'language': 'eng',
+            'isOverlayRequired': True
+        }
+        headers = {
+            'apikey': 'helloworld'
+        }
+        
+        response = requests.post('https://api.ocr.space/parse/image', data=payload, headers=headers, timeout=30)
+        result = response.json()
+        
+        if result.get('IsErroredOnProcessing'):
+            raise Exception(result.get('ErrorMessage', ['Unknown error'])[0])
+            
+        parsed_results = result.get('ParsedResults', [])
+        if parsed_results:
+            lines = parsed_results[0].get('TextOverlay', {}).get('Lines', [])
+            for line in lines:
+                linetext = line.get('LineText', '').strip()
+                if not linetext: continue
+                
+                words = line.get('Words', [])
+                if words:
+                    top = min(w['Top'] for w in words)
+                    left = min(w['Left'] for w in words)
+                    height = max(w['Height'] for w in words)
+                    width = sum(w['Width'] for w in words)
+                    
+                    box = [
+                        [left, top],
+                        [left + width, top],
+                        [left + width, top + height],
+                        [left, top + height]
+                    ]
+                    parsed_lines.append((box, linetext, 0.95))
+                    
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "declarations": [],
+            "missing_tags": [],
+            "error": f"OCR API failed: {exc}",
+        }
+
+    misleading_patterns = [
+        r"\bminimum\s+\d+(?:[.,]\d+)?",
+        r"\bnot\s+less\s+than\s+\d+(?:[.,]\d+)?",
+        r"\bat\s+least\s+\d+(?:[.,]\d+)?",
+        r"\bapproximately\s+\d+(?:[.,]\d+)?",
+        r"\bapprox\.?\s*\d+(?:[.,]\d+)?"
+    ]
+
+    declarations = []
+    
+    # Pre-scan full document context to help multi-line detection
+    full_doc_text = " ".join([p[1] for p in parsed_lines]).lower()
+    has_global_mrp_header = any(k in full_doc_text for k in ["m.r.p", "mrp", "max. retail price", "retail price"])
+
+    for idx, (box, text, conf) in enumerate(parsed_lines):
+        # Calculate bounding box height
+        pts = box.tolist() if hasattr(box, 'tolist') else box
+        y_coords = [p[1] for p in pts]
+        box_height_px = (max(y_coords) - min(y_coords)) / scale
+        
+        # Physical height estimate in mm via AR geometry
+        height_mm = round((box_height_px * distance_mm) / focal_length_px, 2)
+        
+        tag = "general"
+        is_compliant = True
+        failure_reason = None
+        
+        text_lower = text.lower()
+        has_digits = bool(re.search(r'\d', text))
+        
+        # Context window: inspect previous and next lines
+        prev_text = parsed_lines[idx - 1][1].lower() if idx > 0 else ""
+        next_text = parsed_lines[idx + 1][1].lower() if idx < len(parsed_lines) - 1 else ""
+        context_window = f"{prev_text} {text_lower} {next_text}"
+        
+        # --- 1. MRP Detection ---
+        # Matches: "M.R.P. Rs. 105.41", "M.R.P. Rs.", "105.41" next to MRP, "₹105", "Rs. 105", etc.
+        is_mrp_text = any(k in text_lower for k in ["m.r.p", "mrp", "r.p.", "₹", "inr", "max. retail"])
+        is_rs_number = bool(re.search(r'(?:rs\.?|₹|inr)\s*\d+', text_lower))
+        is_price_value_near_mrp = (has_global_mrp_header or "mrp" in context_window or "m.r.p" in context_window) and bool(re.search(r'^\d+[.,]\d{2}$', text_lower))
+        
+        if is_mrp_text or is_rs_number or is_price_value_near_mrp:
+            tag = "mrp"
+
+        # Unit sale price is a separate declaration; it cannot be derived from
+        # MRP alone because its basis depends on the declared quantity/unit.
+        elif "unit sale price" in text_lower or "unit price" in text_lower or re.search(
+            r"(?:₹\s*\d|rs\.?\s*\d).{0,30}(?:/|\bper\b)\s*(?:100\s*)?(?:kg|g|l|ml|piece|unit)\b",
+            text_lower,
+        ):
+            tag = "unit_sale_price"
+
+        # --- 2. Net Quantity Detection ---
+        elif any(k in text_lower for k in ["net wt", "net weight", "net qty", "net quantity", " 30g", "30 g", "30g", "wt.", "weight"]) or \
+             (bool(re.search(r'\b\d+\s*(?:g|gm|gms|ml|l|kg|mg)\b', text_lower)) and not any(k in text_lower for k in ["usp", "ip", "w/w", "%", "iodine"])):
+            tag = "net_quantity"
+
+        # --- 3. Batch Code Detection ---
+        elif any(k in text_lower for k in ["batch", "lot no", "b. no", "b.no", "batch no"]):
+            tag = "batch_code"
+        elif "batch" in prev_text and has_digits:
+            tag = "batch_code"
+
+        # --- 4. Manufacturing & Expiry Date Detection ---
+        elif any(k in text_lower for k in ["mfg", "mfd", "expiry", "exp.", "exp date", "pkd", "packed", "date"]):
+            tag = "manufacturing_date"
+        elif any(k in prev_text for k in ["mfg", "expiry", "exp"]) and bool(re.search(r'\d{2}/\d{4}|\d{2}/\d{2}', text_lower)):
+            tag = "manufacturing_date"
+
+        # --- 5. Consumer Care Detection ---
+        elif any(k in text_lower for k in ["toll free", "feedback", "complaint", "queries", "customer care", "helpline", "email:"]):
+            tag = "consumer_care"
+
+        # --- 6. Storage Instructions ---
+        elif any(k in text_lower for k in ["store below", "protect from", "do not freeze", "storage:", "keep away", "dry place"]):
+            tag = "storage"
+
+        # --- 7. Manufacturer / Marketing Details ---
+        elif any(k in text_lower for k in ["marketed by", "manufactured by", "mfd. by", "mfd by", "mfg. lic", "mfg by", "cipla health"]):
+            tag = "manufacturer"
+
+        # Check for misleading quantity expressions
+        if tag == "net_quantity":
+            for pattern in misleading_patterns:
+                if re.search(pattern, text_lower):
+                    is_compliant = False
+                    failure_reason = "Potentially misleading quantity expression detected."
+                    break
+
+        # Normalize coordinates to 250x350 preview canvas
+        scaled_box = [
+            [int((pt[0] / (w_img * scale)) * 250), int((pt[1] / (h_img * scale)) * 350)]
+            for pt in pts
+        ]
+
+    # Determine dynamic message from Database Rules
+        db_message = "Declaration verified."
+        if db is not None:
+            # Query the database for the specific compliance rule
+            from backend.app.db.models import ComplianceRule
+            rule = db.query(ComplianceRule).filter(ComplianceRule.tag == tag.upper(), ComplianceRule.category_id == category_id).first()
+            if rule and rule.legal_act_reference:
+                db_message = f"Prototype rule reference: {rule.legal_act_reference}"
+            else:
+                db_message = FIELD_MESSAGES.get(tag, "Declaration verified.")
         else:
-            declarations = []
-    except Exception as e:
-        declarations = []
+            db_message = FIELD_MESSAGES.get(tag, "Declaration verified.")
 
-    # Calculate compliance score
-    found_tags = {d["tag"].upper() for d in declarations}
-    
+        declarations.append({
+            "text": text,
+            "tag": tag.upper(),
+            "field": tag,
+            "confidence": round(conf, 2),
+            "box": scaled_box,
+            "height_mm": height_mm,
+            "is_compliant": is_compliant,
+            "message": failure_reason if failure_reason else db_message,
+            "failure_reason": failure_reason
+        })
+
+    # Check missing mandatory tags against the Database
     missing_tags = []
     if db is not None:
         from backend.app.db.models import ComplianceRule
         mandatory_rules = db.query(ComplianceRule).filter(ComplianceRule.category_id == category_id, ComplianceRule.is_mandatory == True).all()
         mandatory_tags = {r.tag for r in mandatory_rules}
-        
-        # We assume language check passes if any text was found
-        if declarations:
+        found_tags = {d["tag"].upper() for d in declarations}
+
+        # This prototype has no ruleset for applying these context-dependent
+        # exemptions. Do not silently remove declarations based on a checkbox.
+        has_valid_language = any(re.search(r'[a-zA-Z\u0900-\u097F]', p[1]) for p in parsed_lines)
+        if has_valid_language:
             found_tags.add("LANGUAGE_CHECK")
-            
+
         missing_tags = list(mandatory_tags - found_tags)
-        
-    for tag in missing_tags:
-        declarations.append({
-            "text": "(Missing)",
-            "tag": tag.upper(),
-            "box": [[0,0],[0,0],[0,0],[0,0]],
-            "height_mm": 0.0,
-            "is_compliant": False,
-            "finding_status": "MISSING",
-            "message": f"Mandatory declaration {tag} not found.",
-            "failure_reason": f"Missing {tag}"
-        })
 
-    is_compliant = len(missing_tags) == 0
-    compliance_score = max(0.0, 100.0 - (len(missing_tags) * 20.0))
-    if compliance_score > 0 and not is_compliant:
-        compliance_score = min(compliance_score, 80.0)
-
+    warnings = [
+        "Displayed text-height values are rough estimates from fixed, uncalibrated camera geometry. They are not used to determine scan status or establish compliance."
+    ]
+    if is_institutional or rule_33_gst_active or weight_under_10g or is_medical_device:
+        warnings.append("Special category or exemption context was supplied but is not automatically evaluated. Review the applicable rules manually.")
+    
+    status = "POTENTIAL_ISSUES" if (len(declarations) == 0 or len(missing_tags) > 0 or any(not d["is_compliant"] for d in declarations)) else "NO_FLAGS"
+    
     return {
-        "status": "COMPLIANT" if is_compliant else "NON_COMPLIANT",
-        "compliance_score": compliance_score,
-        "ocr_engine": "Groq Llama-3.2-Vision",
+        "status": status,
         "product_type": product_type,
         "declarations": declarations,
-        "missing_tags": missing_tags
+        "missing_tags": missing_tags,
+        "warnings": warnings,
+        "ar_parameters": {
+            "distance_mm": distance_mm,
+            "focal_length_px": focal_length_px
+        }
     }
