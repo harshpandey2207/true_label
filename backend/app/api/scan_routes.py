@@ -52,16 +52,23 @@ def analyze_ar_scan(
                 raise HTTPException(status_code=422, detail="An uploaded image is empty.")
             if len(raw) > MAX_IMAGE_BYTES:
                 raise HTTPException(status_code=413, detail="Each image must be 10 MB or smaller.")
-            decoded = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
-            if decoded is None:
+            from PIL import Image
+            import io
+            try:
+                img = Image.open(io.BytesIO(raw))
+                if img.mode != "RGB":
+                    img = img.convert("RGB")
+                image_width, image_height = img.size
+                if image_width * image_height > 40_000_000 or max(image_width, image_height) > 12_000:
+                    raise HTTPException(status_code=413, detail="Images must be no larger than 40 megapixels.")
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                    temp_path = tmp.name
+                    img.save(temp_path, format="JPEG", quality=85)
+                temp_paths.append((image.filename or "package-side.jpg", temp_path))
+            except HTTPException:
+                raise
+            except Exception:
                 raise HTTPException(status_code=415, detail="A file could not be decoded as an image.")
-            image_height, image_width = decoded.shape[:2]
-            if image_width * image_height > 40_000_000 or max(image_width, image_height) > 12_000:
-                raise HTTPException(status_code=413, detail="Images must be no larger than 40 megapixels.")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-                temp_path = tmp.name
-                cv2.imwrite(temp_path, decoded)
-            temp_paths.append((image.filename or "package-side.jpg", temp_path))
 
         for filename, temp_path in temp_paths:
             analysis = analyze_product_label(
