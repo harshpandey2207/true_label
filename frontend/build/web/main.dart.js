@@ -128284,7 +128284,7 @@ q9(a,b){return this.aoC(a,b)},
 aoC(a,b){var s=0,r=A.N(t.H),q=1,p=[],o,n,m,l,k,j,i,h,g,f
 var $async$q9=A.J(function(c,d){if(c===1){p.push(d)
 s=q}for(;;)switch(s){case 0:j="demo_"+b+"@truelabel.ai"
-i="demo"
+i="demo_password123"
 h=t.z
 A.zt(!1,new A.atH(),a,h)
 q=3

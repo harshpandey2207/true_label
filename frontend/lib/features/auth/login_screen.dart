@@ -12,7 +12,7 @@ class LoginScreen extends StatelessWidget {
 
   Future<void> _enter(BuildContext context, String role) async {
     final demoEmail = 'demo_${role}@truelabel.ai';
-    final demoPassword = 'demo';
+    final demoPassword = 'demo_password123';
     
     showDialog(
       context: context,

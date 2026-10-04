@@ -18,6 +18,7 @@ class RegisterRequest(BaseModel):
     email: str = Field(min_length=5, max_length=254)
     password: str = Field(min_length=10, max_length=128)
     organization_name: str = Field(min_length=2, max_length=200)
+    role: str = "business_owner"
 
     @field_validator("email")
     @classmethod
@@ -56,7 +57,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         full_name=payload.full_name.strip(),
         email=email,
         password_hash=hash_password(payload.password),
-        role="business_owner",
+        role=payload.role,
         organization_name=payload.organization_name.strip(),
     )
     db.add(user)
