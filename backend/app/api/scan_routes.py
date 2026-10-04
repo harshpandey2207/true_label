@@ -2,8 +2,6 @@ import os
 import tempfile
 from typing import List
 
-import cv2
-import numpy as np
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
