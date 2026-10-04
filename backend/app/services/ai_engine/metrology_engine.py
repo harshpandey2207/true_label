@@ -73,7 +73,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
                 error_msg = data.get('ErrorMessage', [''])[0]
                 if "not a valid image" in error_msg.lower() or "limit" in error_msg.lower():
                     payload['OCREngine'] = 1
-                    resp = requests.post('https://api.ocr.space/parse/image', data=payload, headers=headers, timeout=60)
+                    resp = requests.post('https://api.ocr.space/parse/image', data=payload, files=files, headers=headers, timeout=60)
                     data = resp.json()
             
             if not data.get('IsErroredOnProcessing'):
@@ -142,9 +142,9 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         context_window = f"{prev_text} {text_lower} {next_text}"
         
         # --- 1. MRP Detection ---
-        # Matches: "M.R.P. Rs. 105.41", "M.R.P. Rs.", "105.41" next to MRP, "₹105", "Rs. 105", etc.
-        is_mrp_text = any(k in text_lower for k in ["m.r.p", "mrp", "r.p.", "₹", "inr", "max. retail"])
-        is_rs_number = bool(re.search(r'(?:rs\.?|₹|inr)\s*\d+', text_lower))
+        # Matches: "M.R.P. Rs. 105.41", "M.R.P. Rs.", "105.41" next to MRP, "?105", "Rs. 105", etc.
+        is_mrp_text = any(k in text_lower for k in ["m.r.p", "mrp", "r.p.", "?", "inr", "max. retail", "rs.", "urd rs"])
+        is_rs_number = bool(re.search(r'(?:rs\.?|?|inr)\s*\d+', text_lower))
         is_price_value_near_mrp = (has_global_mrp_header or any(k in context_window for k in ["mrp", "m.r.p", "rs", "?", "urd"])) and bool(re.search(r'^\d+[.,]\d{2}$', text_lower))
         
         if is_mrp_text or is_rs_number or is_price_value_near_mrp:
