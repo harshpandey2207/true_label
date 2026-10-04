@@ -337,6 +337,28 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
+              padding: EdgeInsets.all(12),
+              margin: EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(8)
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Demo Disclaimer: Due to CPU and RAM limitations on the free-tier Render server, Label Generation and Scanning are temporarily powered by the Gemini 1.5 API. The final production version will use the embedded on-device PaddleOCR and local LLM pipelines as originally decided.',
+                      style: TextStyle(color: Colors.orange.shade800, fontSize: 12, fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               decoration: BoxDecoration(
@@ -490,6 +512,28 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Container(
+              padding: EdgeInsets.all(12),
+              margin: EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.1),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                borderRadius: BorderRadius.circular(8)
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Demo Disclaimer: Due to CPU and RAM limitations on the free-tier Render server, Label Generation and Scanning are temporarily powered by the Gemini 1.5 API. The final production version will use the embedded on-device PaddleOCR and local LLM pipelines as originally decided.',
+                      style: TextStyle(color: Colors.orange.shade800, fontSize: 12, fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             Container(
               width: double.infinity,
               padding: EdgeInsets.all(20),
