@@ -1,58 +1,105 @@
-import base64
 import json
+import base64
 import urllib.request
 import urllib.error
-import os
-import re
-from PIL import Image
+from typing import Any, Dict, List, Tuple
+from fastapi import HTTPException
 
-def _generate_svg_with_groq(image_path: str, context_details: dict) -> str:
+CATEGORIES = [
+    "General Packaged Commodity",
+    "Food & Beverages",
+    "Electronics & Appliances",
+    "Cosmetics, Ointments & Pharma Goods",
+    "Apparel & Textiles",
+    "Medical Devices",
+]
+
+def generate_label_draft(
+    product_name: str,
+    product_category: str,
+    shape: str,
+    dimensions: str,
+    custom_prompt: str,
+    label_values: dict,
+    additional_details: str,
+    images: list,
+    side_count: int = 2
+) -> dict:
+    
+    import os
+    import json
+    import base64
+    import urllib.request
+    import urllib.error
+
     gemini_api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not gemini_api_key:
-        raise Exception("GEMINI_API_KEY is not set. Please add it to your Render Environment Variables.")
+        raise ValueError("GEMINI_API_KEY environment variable is missing. Please add it to your Render Environment Variables.")
 
-    try:
-        with Image.open(image_path) as img:
-            w, h = img.size
-            if max(w, h) > 1000:
-                scale = 1000 / max(w, h)
-                img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                img.save(image_path, format="JPEG")
-    except Exception:
-        pass
+    images_b64 = []
+    
+    for _, img_bytes in images:
+        try:
+            from PIL import Image
+            import io
+            with Image.open(io.BytesIO(img_bytes)) as img:
+                w, h = img.size
+                if max(w, h) > 800:
+                    scale = 800 / max(w, h)
+                    img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+                    if img.mode != 'RGB':
+                        img = img.convert('RGB')
+                    buffer = io.BytesIO()
+                    img.save(buffer, format="JPEG", quality=85)
+                    img_bytes = buffer.getvalue()
+        except Exception:
+            pass
+        
+        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
+        images_b64.append({
+            "inline_data": {
+                "mime_type": "image/jpeg",
+                "data": img_b64
+            }
+        })
 
-    with open(image_path, "rb") as f:
-        img_b64 = base64.b64encode(f.read()).decode("utf-8")
+    prompt_text = f"""You are a senior packaging designer and Legal Metrology compliance officer.
+Your task is to generate a beautiful, compliant product label for a new product based on the provided requirements.
 
-    prompt = f"""You are a packaging design AI.
-The user wants to generate a new compliant product label based on the attached reference image.
-Make sure to address these missing requirements: {context_details.get('missing_tags', '')}
+Product Name: {product_name}
+Category: {product_category}
+Target Shape: {shape}
+Dimensions: {dimensions}
+Number of Label Panels/Sides: {side_count}
 
-Additional details from user: {context_details.get('user_prompt', '')}
+MANDATORY DECLARATION DATA (These must be perfectly visible on the label):
+{json.dumps(label_values, indent=2)}
 
-Return ONLY valid SVG code for the label. No markdown formatting, no explanations. 
-Start exactly with <svg and end exactly with </svg>."""
+Additional Context/Notes:
+{additional_details}
+
+User's Custom Design Prompt:
+{custom_prompt}
+
+Return a completely valid SVG string for the requested {side_count} panels. 
+Wrap the panels inside a single <svg viewBox="0 0 1600 800"> (if multiple sides).
+Make the design professional, highly realistic, and use beautiful fonts and contrasting colors.
+
+Respond with EXACTLY this JSON structure:
+{{
+  "svg_body": "<svg>...</svg>",
+  "explanation": "Brief explanation of the layout and where declarations are placed."
+}}"""
+
+    contents = [{"parts": [{"text": prompt_text}] + images_b64}]
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
 
     payload = json.dumps({
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt},
-                    {
-                        "inline_data": {
-                            "mime_type": "image/jpeg",
-                            "data": img_b64
-                        }
-                    }
-                ]
-            }
-        ],
+        "contents": contents,
         "generationConfig": {
-            "temperature": 0.3
+            "temperature": 0.2,
+            "responseMimeType": "application/json"
         }
     }).encode("utf-8")
 
@@ -63,38 +110,24 @@ Start exactly with <svg and end exactly with </svg>."""
     try:
         with urllib.request.urlopen(req, timeout=90) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-            svg_text = data["candidates"][0]["content"]["parts"][0]["text"]
-            
-        svg_match = re.search(r'(<svg[\s\S]*?</svg>)', svg_text, re.IGNORECASE)
-        if svg_match:
-            return svg_match.group(1)
-        return svg_text.strip()
+            result_text = data["candidates"][0]["content"]["parts"][0]["text"]
+    except urllib.error.HTTPError as e:
+        error_msg = e.read().decode()
+        raise ValueError(f"Gemini API Error: {error_msg}")
     except Exception as e:
-        raise Exception(f"Gemini API Error: {e}")
-
-def generate_compliant_label(
-    category_name: str,
-    missing_tags: str,
-    tag_values: dict,
-    reference_image_paths: list,
-    user_prompt: str = ""
-) -> dict:
-    if not reference_image_paths:
-        return {"status": "ERROR", "svg_body": "", "error": "No reference images provided."}
-
-    context = {
-        "category": category_name,
-        "missing_tags": missing_tags,
-        "tag_values": tag_values,
-        "user_prompt": user_prompt
-    }
-
+        raise ValueError(f"AI API Error: {e}")
+        
     try:
-        svg_result = _generate_svg_with_groq(reference_image_paths[0], context)
-        return {
-            "status": "SUCCESS",
-            "svg_body": svg_result,
-            "error": None
-        }
+        json_match = re.search(r'\{[\s\S]*\}', result_text)
+        if json_match:
+            label_data = json.loads(json_match.group())
+        else:
+            raise ValueError("No JSON found")
     except Exception as e:
-        return {"status": "ERROR", "svg_body": "", "error": str(e)}
+        raise ValueError(f"AI output parsing failed: {e}\nRaw output: {result_text}")
+
+    return {
+        "label_data": label_data,
+        "warnings": ["Using Gemini 1.5 Flash due to Render memory limits."],
+        "engine_used": "Gemini 1.5 Flash API"
+    }
