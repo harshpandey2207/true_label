@@ -151,9 +151,9 @@ class __ScannerScreenState extends State<_ScannerScreen> {
     }
     final XFile? photo = await _picker.pickImage(
       source: ImageSource.camera,
-      imageQuality: 70, 
-      maxWidth: 1200,   
-      maxHeight: 1200,
+      imageQuality: 95, 
+      maxWidth: 3000,   
+      maxHeight: 3000,
     );
     if (!mounted || photo == null) return;
     setState(() {
@@ -168,9 +168,9 @@ class __ScannerScreenState extends State<_ScannerScreen> {
       return;
     }
     final List<XFile> photos = await _picker.pickMultiImage(
-      imageQuality: 70,
-      maxWidth: 1200,
-      maxHeight: 1200,
+      imageQuality: 95,
+      maxWidth: 3000,
+      maxHeight: 3000,
     );
     if (mounted && photos.isNotEmpty) {
       setState(() {
