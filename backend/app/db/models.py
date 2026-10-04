@@ -88,3 +88,55 @@ class AuditEvent(Base):
     entity_type = Column(String)
     entity_id = Column(String)
     details = Column(JSON)
+
+class LabelDraftRecord(Base):
+    __tablename__ = "label_draft_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"))
+    product_name = Column(String)
+    category = Column(String)
+    source_scan_id = Column(String)
+    label_data = Column(JSON)
+    warnings = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class NoticeRecord(Base):
+    __tablename__ = "notice_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"))
+    title = Column(String)
+    body = Column(String)
+    status = Column(String, default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class PaymentRecord(Base):
+    __tablename__ = "payment_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"))
+    description = Column(String)
+    amount_minor = Column(Integer)
+    currency = Column(String, default="INR")
+    status = Column(String, default="pending_confirmation")
+    external_reference = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class ProductRecord(Base):
+    __tablename__ = "product_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"))
+    name = Column(String)
+    category = Column(String)
+    sku = Column(String, nullable=True)
+    declarations = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class ScanRecord(Base):
+    __tablename__ = "scan_records"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("user_accounts.id"))
+    category = Column(String)
+    status = Column(String)
+    result = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
