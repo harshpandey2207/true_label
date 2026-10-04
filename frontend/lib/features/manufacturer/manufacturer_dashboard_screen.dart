@@ -350,7 +350,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Demo Disclaimer: Due to CPU and RAM limitations on the free-tier Render server, Label Generation and Scanning are temporarily powered by the Gemini 1.5 API. The final production version will use the embedded on-device PaddleOCR and local LLM pipelines as originally decided.',
+                      'Demo Mode: Scanner is powered by OCR.space and Label Generator is powered by Gemini API.',
                       style: TextStyle(color: Colors.orange.shade800, fontSize: 12, fontStyle: FontStyle.italic),
                     ),
                   ),
@@ -526,7 +526,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Demo Disclaimer: Due to CPU and RAM limitations on the free-tier Render server, Label Generation and Scanning are temporarily powered by the Gemini 1.5 API. The final production version will use the embedded on-device PaddleOCR and local LLM pipelines as originally decided.',
+                      'Demo Mode: Scanner is powered by OCR.space and Label Generator is powered by Gemini API.',
                       style: TextStyle(color: Colors.orange.shade800, fontSize: 12, fontStyle: FontStyle.italic),
                     ),
                   ),
