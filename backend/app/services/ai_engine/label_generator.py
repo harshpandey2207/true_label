@@ -4,8 +4,6 @@ import urllib.request
 import urllib.error
 from typing import Any, Dict, List, Tuple
 from fastapi import HTTPException
-import cv2
-import numpy as np
 
 CATEGORIES = [
     "General Packaged Commodity",
@@ -35,19 +33,18 @@ def generate_label_draft(
     images_b64 = []
     
     for _, img_bytes in images:
-        file_bytes = np.frombuffer(img_bytes, np.uint8)
-        cv_img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-        if cv_img is None: continue
-        
-        # Resize to max 800px to avoid Groq payload limits
-        max_dim = 800
-        h, w = cv_img.shape[:2]
-        if max(h, w) > max_dim:
-            scale = max_dim / max(h, w)
-            cv_img = cv2.resize(cv_img, (int(w * scale), int(h * scale)))
-            
-        _, buffer = cv2.imencode('.jpg', cv_img, [int(cv2.IMWRITE_JPEG_QUALITY), 75])
-        images_b64.append(base64.b64encode(buffer).decode("utf-8"))
+        from PIL import Image
+        import io
+        try:
+            img = Image.open(io.BytesIO(img_bytes))
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+            img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            img.save(buffer, format="JPEG", quality=75)
+            images_b64.append(base64.b64encode(buffer.getvalue()).decode("utf-8"))
+        except Exception:
+            continue
         
     num_sides = max(side_count, len(images_b64)) if len(images_b64) > 0 else side_count
     compliance_block = "\n".join([f"- {k}: {v}" for k, v in label_values.items()])

@@ -1,16 +1,11 @@
-# Core API framework
 fastapi==0.115.5
 starlette==0.41.2
 uvicorn==0.32.0
 python-multipart==0.0.12
 python-dotenv==1.0.1
-
-# Data validation
 pydantic==2.10.3
 pydantic_core==2.27.1
 annotated-types==0.7.0
-
-# Networking / HTTP
 httpx==0.28.1
 httpcore==1.0.7
 requests==2.32.3
@@ -18,25 +13,12 @@ urllib3==2.2.3
 certifi==2024.12.14
 idna==3.10
 charset-normalizer==3.4.0
-
-# Image processing
 pillow==10.4.0
 numpy==1.26.4
-
-# PaddleOCR — pinned to 2.9.1 (stable, fast on CPU, no PIR/oneDNN bug)
-
-# PaddleOCR 2.x dependencies
 tqdm==4.67.1
 PyYAML==6.0.2
-
-# Utilities
 packaging==24.2
 six==1.17.0
 setuptools==75.6.0
-
-# cache buster 2
-
-
-# Database architecture
 SQLAlchemy==2.0.25
 psycopg2-binary==2.9.9

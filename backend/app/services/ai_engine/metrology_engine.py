@@ -7,11 +7,9 @@ os.environ["FLAGS_use_mkldnn"] = "0"
 os.environ["PADDLE_PDX_ENABLE_MKLDNN_BYDEFAULT"] = "0"
 os.environ["FLAGS_new_executor_micro_batching"] = "0"
 
-import cv2
 import re
 from typing import Dict, Any
 
-cv2.setNumThreads(1)
 
 _ocr = None
 _ocr_error = None
