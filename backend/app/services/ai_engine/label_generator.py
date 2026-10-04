@@ -103,7 +103,7 @@ Generate {num_sides} sides in the array. Return only the raw JSON.
         raise ValueError("GROQ_API_KEY environment variable is missing. Required for Llama Vision API.")
 
     url = "https://api.groq.com/openai/v1/chat/completions" if groq_api_key else "https://api.together.xyz/v1/chat/completions"
-    model = "llama-3.2-90b-vision-preview" if groq_api_key else "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo"
+    model = "llama-3.2-11b-vision-preview" if groq_api_key else "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo"
     api_key = groq_api_key or llama_api_key
 
     payload = json.dumps({

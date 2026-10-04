@@ -116,7 +116,7 @@ def analyze_product_label(
     Return only JSON. Do not include markdown formatting."""
 
     url = "https://api.groq.com/openai/v1/chat/completions" if groq_api_key else "https://api.together.xyz/v1/chat/completions"
-    model = "llama-3.2-90b-vision-preview" if groq_api_key else "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo"
+    model = "llama-3.2-11b-vision-preview" if groq_api_key else "meta-llama/Llama-3.2-90B-Vision-Instruct-Turbo"
     api_key = groq_api_key or llama_api_key
 
     payload = json.dumps({
@@ -143,6 +143,10 @@ def analyze_product_label(
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             result_text = data["choices"][0]["message"]["content"]
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            return {"status": "ERROR", "declarations": [], "error": "Invalid or expired GROQ_API_KEY on Render."}
+        return {"status": "ERROR", "declarations": [], "error": f"AI Error: {e}"}
     except Exception as e:
         return {"status": "ERROR", "declarations": [], "error": f"AI Error: {e}"}
         
