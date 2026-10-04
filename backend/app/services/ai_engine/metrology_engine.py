@@ -118,7 +118,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
     
     # Pre-scan full document context to help multi-line detection
     full_doc_text = " ".join([p[1] for p in parsed_lines]).lower()
-    has_global_mrp_header = any(k in full_doc_text for k in ["m.r.p", "mrp", "max. retail price", "retail price"])
+    has_global_mrp_header = any(k in full_doc_text for k in ["m.r.p", "mrp", "max. retail price", "retail price", "rs.", "rs ", "urd rs"])
 
     for idx, (box, text, conf) in enumerate(parsed_lines):
         # Calculate bounding box height
@@ -145,7 +145,7 @@ def analyze_product_label(image_path: str, product_type: str = "ointment", dista
         # Matches: "M.R.P. Rs. 105.41", "M.R.P. Rs.", "105.41" next to MRP, "₹105", "Rs. 105", etc.
         is_mrp_text = any(k in text_lower for k in ["m.r.p", "mrp", "r.p.", "₹", "inr", "max. retail"])
         is_rs_number = bool(re.search(r'(?:rs\.?|₹|inr)\s*\d+', text_lower))
-        is_price_value_near_mrp = (has_global_mrp_header or "mrp" in context_window or "m.r.p" in context_window) and bool(re.search(r'^\d+[.,]\d{2}$', text_lower))
+        is_price_value_near_mrp = (has_global_mrp_header or any(k in context_window for k in ["mrp", "m.r.p", "rs", "?", "urd"])) and bool(re.search(r'^\d+[.,]\d{2}$', text_lower))
         
         if is_mrp_text or is_rs_number or is_price_value_near_mrp:
             tag = "mrp"
