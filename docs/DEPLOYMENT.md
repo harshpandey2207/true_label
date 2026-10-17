@@ -42,7 +42,7 @@ $env:TRUE_LABEL_ENABLE_LOCAL_OCR = '1'
 This repository is configured to update the existing Render service `truelabel-backend` and the existing Vercel static deployment; it does not define duplicate services. Commit only the intended source changes on the production branch used by the connected projects, push through the normal repository workflow, and let the existing integrations deploy. Confirm the Render service retains its current database, secrets, plan and storage settings. Confirm Vercel's build output is regenerated from `frontend/build/web` (or use the existing project build command) and that the generated `assets/.env` points to the Render origin.
 
 The production update has been successfully committed, pushed to `main`, and deployed to both services:
-- Vercel frontend: `https://true-label-jade.vercel.app` (served from `frontend/build/web` with `API_BASE_URL=https://true-label-backend.onrender.com`).
+- Vercel frontend: `https://web-ten-puce-86.vercel.app` (served from `frontend/build/web` with `API_BASE_URL=https://true-label-backend.onrender.com`).
 - Render backend: `https://true-label-backend.onrender.com` (running version `1.3.0` with 29 active endpoints and universal PostgreSQL column compatibility).
 - Live verification: Health check, representative image scanning, clarification upload, scan history, PDF report generation/download, label drafting/PDF download, and inspector escalation/admin review workflows were executed against the live endpoints and verified passing.
 

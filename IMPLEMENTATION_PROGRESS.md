@@ -143,7 +143,7 @@ Completed: truthful persisted scanning, an optional local OCR boundary, a determ
 
 - Existing Render configuration is `render.yaml` service `truelabel-backend`, Docker-based, free plan, Oregon, using the repository `Dockerfile` and `backend/requirements.txt`.
 - Existing frontend configuration is `vercel.json` with static output `frontend/build/web`; the checked-in frontend asset environment file contains `API_BASE_URL=https://true-label-backend.onrender.com`.
-- The prior public frontend URL recorded in repository history is `https://true-label-jade.vercel.app`; the existing Render origin is `https://true-label-backend.onrender.com`.
+- The public frontend URL is `https://web-ten-puce-86.vercel.app`; the existing Render origin is `https://true-label-backend.onrender.com`.
 - Source `ApiService` fallback was corrected from localhost to the existing Render backend. Local development can still override it through `frontend/.env`.
 
 ### Deployment blockers and evidence
@@ -177,7 +177,7 @@ Prior attempt noted above was blocked by proxy and environment restrictions. The
    - Committed changes and pushed to `origin main` (commits `89040cf` and `8236e41`).
 4. **Live Verification Results**:
    - Render service `truelabel-backend` built and deployed live at `https://true-label-backend.onrender.com` (version `1.3.0`, 29 active endpoints).
-   - Vercel static deployment live at `https://true-label-jade.vercel.app` (200 OK, targeting Render backend).
+   - Vercel static deployment live at `https://web-ten-puce-86.vercel.app` (200 OK, targeting Render backend).
    - Executed live automated test suite (`test_live_deployment.py`) against production:
      - `frontend_homepage`: **PASS** (HTTP 200)
      - `backend_health`: **PASS** (HTTP 200, `{"status": "HEALTHY"}`)

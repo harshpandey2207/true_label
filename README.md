@@ -2,6 +2,11 @@
 
 True Label is a prototype for screening package-label images and preparing editable label drafts. It is a decision-support demo, not a legal compliance certificate, regulator portal, or notice/payment system.
 
+## Live Deployments
+
+- **Web Application (Vercel)**: [https://web-ten-puce-86.vercel.app/](https://web-ten-puce-86.vercel.app/)
+- **API Backend (Render)**: [https://true-label-backend.onrender.com/](https://true-label-backend.onrender.com/) (Interactive API docs at `/docs`)
+
 ## What works in this prototype
 
 - Flutter app for manufacturer, inspector, and admin demo screens.
