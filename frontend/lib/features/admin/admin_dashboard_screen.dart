@@ -9,6 +9,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:printing/printing.dart';
 import '../../core/report_generator.dart';
 import '../../core/report_viewer.dart';
+import '../../core/api_service.dart';
 import 'mock_data.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -748,7 +749,30 @@ class _IndiaHoverPainter extends CustomPainter {
 }
 
 
-class _PendingViolationsScreen extends StatelessWidget {
+class _PendingViolationsScreen extends StatefulWidget {
+  @override
+  State<_PendingViolationsScreen> createState() => _PendingViolationsScreenState();
+}
+
+class _PendingViolationsScreenState extends State<_PendingViolationsScreen> {
+  late Future<Map<String, dynamic>> _cases;
+
+  @override
+  void initState() {
+    super.initState();
+    _cases = ApiService.getJson('/workspace/escalations?limit=100');
+  }
+
+  Future<void> _setStatus(int caseId, String status) async {
+    final response = await ApiService.patchJson('/workspace/escalations/$caseId', {'status': status});
+    if (!mounted) return;
+    if (response['status'] == 'ERROR') {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response['error']?.toString() ?? 'Could not update the case.')));
+      return;
+    }
+    setState(() => _cases = ApiService.getJson('/workspace/escalations?limit=100'));
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -757,15 +781,20 @@ class _PendingViolationsScreen extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Sample Violations Queue', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
+        Text('Escalation cases', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 28, fontWeight: FontWeight.bold)),
         const SizedBox(height: 6),
-        Text('These rows are sample data; no notice or case action is connected.', style: TextStyle(color: textMuted)),
+        Text('Persistent prototype review cases. No government notice, fine, or external message is sent.', style: TextStyle(color: textMuted)),
         SizedBox(height: 24),
         Expanded(
-          child: ListView.builder(
-            itemCount: mockViolations.length,
-            itemBuilder: (context, index) {
-              final violation = mockViolations[index];
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: _cases,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+              final items = snapshot.data?['items'] as List? ?? const [];
+              if (snapshot.data?['status'] == 'ERROR') return Center(child: Text(snapshot.data?['error']?.toString() ?? 'Could not load cases.'));
+              if (items.isEmpty) return const Center(child: Text('No escalation cases yet. Inspector escalations will appear here.'));
+              return ListView.builder(itemCount: items.length, itemBuilder: (context, index) {
+              final violation = Map<String, dynamic>.from(items[index] as Map);
               return Card(
                 color: theme.cardColor,
                 margin: const EdgeInsets.only(bottom: 16),
@@ -777,20 +806,21 @@ class _PendingViolationsScreen extends StatelessWidget {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Expanded(child: Text(violation['product'], style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 22, fontWeight: FontWeight.bold))),
-                          Text(violation['id'], style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 14)),
+                          Expanded(child: Text('${violation['category']} · scan ${violation['scan_id']}', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 22, fontWeight: FontWeight.bold))),
+                          Text('Case #${violation['id']}', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87, fontSize: 14)),
                         ],
                       ),
                       SizedBox(height: 12),
-                      Text('Violation: ${violation['violation']}', style: TextStyle(color: Colors.redAccent, fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('Status: ${violation['status']}', style: TextStyle(color: Colors.orangeAccent, fontSize: 18, fontWeight: FontWeight.bold)),
+                      if (violation['note'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(violation['note'].toString(), style: TextStyle(color: textMuted))),
                       SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, padding: const EdgeInsets.symmetric(vertical: 14)),
-                          onPressed: () => _showNoticeDialog(context, violation['product']),
-                          icon: Icon(Icons.send, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
-                          label: Text('Preview notice workflow (demo)', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+                          onPressed: () => _setStatus(violation['id'] as int, 'in_review'),
+                          icon: Icon(Icons.rate_review, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black),
+                          label: Text('Mark in review', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
                         ),
                       ),
                       SizedBox(height: 12),
@@ -798,14 +828,15 @@ class _PendingViolationsScreen extends StatelessWidget {
                         width: double.infinity,
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(side: BorderSide(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87), padding: const EdgeInsets.symmetric(vertical: 14)),
-                          onPressed: null,
-                          child: Text('Case actions are not connected', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
+                          onPressed: () => _setStatus(violation['id'] as int, 'resolved'),
+                          child: Text('Mark resolved', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white70 : Colors.black87)),
                         ),
                       ),
                     ],
                   ),
                 ),
               );
+              });
             },
           ),
         ),

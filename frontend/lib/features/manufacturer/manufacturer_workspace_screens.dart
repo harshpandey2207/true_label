@@ -57,7 +57,9 @@ String _scanMethod(Map<String, dynamic> scan) {
   final analysis = Map<String, dynamic>.from(((sides.first as Map)['analysis'] as Map?) ?? const {});
   return analysis['ocr_engine']?.toString() == 'paddle'
       ? 'PaddleOCR running locally'
-      : 'OCR.Space service (images sent for text recognition)';
+      : analysis['ocr_engine']?.toString() == 'unavailable'
+          ? 'Text recognition was not configured; images were saved for manual review'
+          : 'Configured local text recognition';
 }
 
 class WorkspaceOverviewScreen extends StatefulWidget {
@@ -292,15 +294,21 @@ class _WorkspaceReportsScreenState extends State<WorkspaceReportsScreen> {
 
   void _load() => _scans = ApiService.getJson('/workspace/scans?limit=100');
 
-  void _openReport(Map<String, dynamic> scan) {
-    ReportViewer.showPdfDialog(
-      context: context,
-      reportId: 'SCAN-${scan['id']}',
-      product: '${scan['category']} package',
-      findingsOrNotes: _scanNotes(scan),
-      noFlagsDetected: scan['status'] == 'NO_FLAGS',
-      
-    );
+  Future<void> _openReport(Map<String, dynamic> scan) async {
+    final scanId = scan['id'];
+    if (scanId is! int) return;
+    final report = await ApiService.createComplianceReport(scanId);
+    if (!mounted) return;
+    final downloadUrl = report['download_url']?.toString();
+    if (report['status'] != 'ERROR' && downloadUrl != null) {
+      ReportViewer.showStoredPdfDialog(
+        context: context,
+        reportCode: report['report_code']?.toString() ?? 'TLR-$scanId',
+        pdfBytes: ApiService.getBytes(downloadUrl),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(report['error']?.toString() ?? 'The persisted report could not be created.')));
+    }
   }
 
   @override

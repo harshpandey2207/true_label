@@ -98,6 +98,23 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> UserAccount | None:
+    """Associate demo actions with a session when one is present, without blocking guest demo entry."""
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        return None
+    try:
+        payload = _decode_token(credentials.credentials)
+    except HTTPException:
+        return None
+    user = db.query(UserAccount).filter(UserAccount.id == payload.get("sub")).first()
+    if user is None or not user.is_active or user.role != payload.get("role"):
+        return None
+    return user
+
+
 def require_roles(*roles: str) -> Callable:
     def dependency(user: UserAccount = Depends(get_current_user)) -> UserAccount:
         if user.role not in roles:

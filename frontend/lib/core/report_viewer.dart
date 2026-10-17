@@ -4,6 +4,61 @@ import 'package:printing/printing.dart';
 import 'report_generator.dart';
 
 class ReportViewer {
+  static void showStoredPdfDialog({
+    required BuildContext context,
+    required String reportCode,
+    required Future<Uint8List?> pdfBytes,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        final screenWidth = MediaQuery.of(context).size.width;
+        final screenHeight = MediaQuery.of(context).size.height;
+        final theme = Theme.of(context);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            width: screenWidth > 800 ? 800 : screenWidth * 0.95,
+            height: screenHeight > 900 ? 900 : screenHeight * 0.9,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(color: theme.brightness == Brightness.dark ? const Color(0xFF1E1E1E) : Colors.white, borderRadius: BorderRadius.circular(8)),
+            child: Column(children: [
+              _dialogHeader(context, 'Persisted compliance report - $reportCode'),
+              Expanded(child: FutureBuilder<Uint8List?>(
+                future: pdfBytes,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
+                  if (snapshot.hasData && snapshot.data != null) {
+                    return PdfPreview(
+                      build: (format) => snapshot.data!,
+                      canChangeOrientation: false,
+                      canChangePageFormat: false,
+                      canDebug: false,
+                      pdfFileName: '$reportCode.pdf',
+                    );
+                  }
+                  return const Center(child: Text('The stored report could not be downloaded. Please retry.'));
+                },
+              )),
+            ]),
+          ),
+        );
+      },
+    );
+  }
+
+  static Widget _dialogHeader(BuildContext context, String title) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: BoxDecoration(color: theme.brightness == Brightness.dark ? Colors.black : const Color(0xFFE0E0E0), borderRadius: const BorderRadius.vertical(top: Radius.circular(8))),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        Expanded(child: Text(title, overflow: TextOverflow.ellipsis, style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black87, fontWeight: FontWeight.bold, fontSize: 16))),
+        InkWell(onTap: () => Navigator.pop(context), child: Icon(Icons.close, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black)),
+      ]),
+    );
+  }
+
   static String _currentDate() {
     const monthNames = [
       'January', 'February', 'March', 'April', 'May', 'June',

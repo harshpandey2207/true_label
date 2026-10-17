@@ -133,6 +133,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
   final List<XFile> _capturedImages = []; 
   List<dynamic>? _analysisResults; 
   bool _overallCompliance = false;
+  int? _scanId;
   final ImagePicker _picker = ImagePicker();
   
   final List<String> _productCategories = [
@@ -201,7 +202,8 @@ class __ScannerScreenState extends State<_ScannerScreen> {
       if (result != null && result['status'] == 'SUCCESS') {
         setState(() {
           _analysisResults = result['results'];
-          _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'NO_FLAGS');
+          _overallCompliance = result['overall_status'] == 'PASS';
+          _scanId = int.tryParse(result['scan_id']?.toString() ?? '');
           _scanState = 2;
         });
       } else {
@@ -224,6 +226,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
     setState(() {
       _scanState = 0;
       _analysisResults = null;
+      _scanId = null;
       _capturedImages.clear();
     });
   }
@@ -255,7 +258,7 @@ class __ScannerScreenState extends State<_ScannerScreen> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Images are processed by PaddleOCR on the configured API server. Text-size values use fixed, uncalibrated camera geometry and are only estimates. OCR and the prototype rule set can miss context; review the package and current requirements before relying on a result.',
+                  'This prototype may use optional local OCR when configured; otherwise it preserves the image as evidence and requests manual confirmation. Text-size values use fixed, uncalibrated camera geometry and are only estimates. Review the package and current requirements before relying on a result.',
                   style: TextStyle(color: textMuted, fontSize: 12, height: 1.4),
                 ),
               ),
@@ -448,6 +451,21 @@ class __ScannerScreenState extends State<_ScannerScreen> {
                     SizedBox(width: 16),
                     ElevatedButton.icon(
                       onPressed: () async {
+                        if (_scanId != null) {
+                          final report = await ApiService.createComplianceReport(_scanId!);
+                          if (!context.mounted) return;
+                          final downloadUrl = report['download_url']?.toString();
+                          if (downloadUrl != null && report['status'] != 'ERROR') {
+                            ReportViewer.showStoredPdfDialog(
+                              context: context,
+                              reportCode: report['report_code']?.toString() ?? 'TLR-$_scanId',
+                              pdfBytes: ApiService.getBytes(downloadUrl),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(report['error']?.toString() ?? 'The persisted report could not be created.')));
+                          }
+                          return;
+                        }
                         List<Uint8List> proofBytes = [];
                         for (var img in _capturedImages) {
                           proofBytes.add(await img.readAsBytes());
@@ -629,10 +647,17 @@ class __ScannerScreenState extends State<_ScannerScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 minimumSize: const Size(double.infinity, 50), 
               ),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Entire Product Report Escalated to Admin Queue.'), backgroundColor: Colors.redAccent)
-                );
+              onPressed: () async {
+                if (_scanId == null) return;
+                final result = await ApiService.postJson('/workspace/escalations', {
+                  'scan_id': _scanId,
+                  'note': 'Inspector requested review after evidence-backed screening.',
+                });
+                if (!context.mounted) return;
+                final message = result['status'] == 'ERROR'
+                    ? (result['error']?.toString() ?? 'Could not create the escalation case.')
+                    : 'Escalation case #${result['id']} is ${result['status']}. It is visible to administrators.';
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: result['status'] == 'ERROR' ? Colors.redAccent : Colors.green));
               },
               icon: Icon(Icons.warning_amber_rounded, color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, size: 24),
               label: Text('ESCALATE TO ADMIN', style: TextStyle(color: theme.brightness == Brightness.dark ? Colors.white : Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),

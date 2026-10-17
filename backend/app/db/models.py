@@ -1,4 +1,4 @@
-from sqlalchemy import Column, JSON, Integer, String, Boolean, ForeignKey, DateTime, Float
+from sqlalchemy import Column, JSON, Integer, String, Boolean, ForeignKey, DateTime, Float, LargeBinary
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from backend.app.db.database import Base
@@ -21,6 +21,11 @@ class ComplianceRule(Base):
     tag = Column(String, index=True) # e.g., MRP, NET_QUANTITY, MANUFACTURER
     is_mandatory = Column(Boolean, default=True)
     legal_act_reference = Column(String) # e.g., "Legal Metrology Rule 6(1)(a)"
+    source_url = Column(String, nullable=True)
+    rule_version = Column(String, default="prototype-2026-10")
+    effective_from = Column(String, nullable=True)
+    review_status = Column(String, default="needs_legal_review")
+    evidence_requirement = Column(String, default="Readable declaration text or a manual confirmation")
     
     category = relationship("ProductCategory", back_populates="rules")
     overrides = relationship("SectoralOverride", back_populates="rule")
@@ -78,6 +83,7 @@ class UserAccount(Base):
     role = Column(String, default="business_owner")
     organization_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class AuditEvent(Base):
     __tablename__ = "audit_events"
@@ -88,6 +94,7 @@ class AuditEvent(Base):
     entity_type = Column(String)
     entity_id = Column(String)
     details = Column(JSON)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 class LabelDraftRecord(Base):
     __tablename__ = "label_draft_records"
@@ -98,6 +105,7 @@ class LabelDraftRecord(Base):
     source_scan_id = Column(String)
     label_data = Column(JSON)
     warnings = Column(JSON)
+    pdf_payload = Column(LargeBinary, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -135,8 +143,64 @@ class ProductRecord(Base):
 class ScanRecord(Base):
     __tablename__ = "scan_records"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("user_accounts.id"))
+    user_id = Column(Integer, ForeignKey("user_accounts.id"), nullable=True)
     category = Column(String)
     status = Column(String)
     result = Column(JSON)
+    image_names = Column(JSON, default=list)
+    rule_engine_version = Column(String, default="prototype-2026-10")
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    evidence = relationship("ScanEvidence", back_populates="scan", cascade="all, delete-orphan")
+
+
+class ScanEvidence(Base):
+    """Original upload retained for a demo scan and its clarification attempts.
+
+    This database-backed storage is intentionally a demo fallback. Production
+    deployments need private object storage with lifecycle/retention controls.
+    """
+
+    __tablename__ = "scan_evidence"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scan_id = Column(Integer, ForeignKey("scan_records.id"), nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    content_type = Column(String, nullable=True)
+    sha256 = Column(String(64), nullable=False, index=True)
+    size_bytes = Column(Integer, nullable=False)
+    payload = Column(LargeBinary, nullable=False)
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    scan = relationship("ScanRecord", back_populates="evidence")
+
+
+class ComplianceReportRecord(Base):
+    __tablename__ = "compliance_report_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scan_id = Column(Integer, ForeignKey("scan_records.id"), nullable=False, index=True)
+    report_code = Column(String, unique=True, nullable=False, index=True)
+    content = Column(JSON, nullable=False)
+    pdf_payload = Column(LargeBinary, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class EscalationCase(Base):
+    """A review request raised from an evidence-backed scan.
+
+    This is deliberately a small, persistent workflow record.  It is not an
+    enforcement notice and must not be presented as one by the client.
+    """
+
+    __tablename__ = "escalation_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    scan_id = Column(Integer, ForeignKey("scan_records.id"), nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("user_accounts.id"), nullable=False, index=True)
+    status = Column(String, default="open", nullable=False, index=True)
+    note = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

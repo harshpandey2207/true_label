@@ -232,7 +232,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
       if (result != null && result['status'] == 'SUCCESS') {
         setState(() {
           _analysisResults = result['results'];
-          _overallCompliance = _analysisResults!.every((r) => r['analysis']['status'] == 'NO_FLAGS');
+          _overallCompliance = result['overall_status'] == 'PASS';
           _scanId = int.tryParse(result['scan_id']?.toString() ?? '');
           _scanState = 2;
         });
@@ -261,8 +261,56 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
     });
   }
 
+  Future<void> _submitClarification() async {
+    if (_scanId == null) return;
+    final image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 95,
+      maxWidth: 3000,
+      maxHeight: 3000,
+    );
+    if (!mounted || image == null) return;
+    setState(() {
+      _scanState = 1;
+      _processingText = 'Adding the clarification image to scan $_scanId...';
+    });
+    final result = await ApiService.analyzeArScan(
+      imageFiles: [image],
+      distanceMm: 300.0,
+      focalLengthPx: 800.0,
+      categoryName: _selectedCategory,
+      scanId: _scanId,
+    );
+    if (!mounted) return;
+    if (result != null && result['status'] == 'SUCCESS') {
+      setState(() {
+        _capturedImages.add(image);
+        _analysisResults = result['results'];
+        _overallCompliance = result['overall_status'] == 'PASS';
+        _scanState = 2;
+      });
+    } else {
+      _showError(result?['error']?.toString() ?? 'The clarification image could not be analysed.');
+    }
+  }
+
   Future<void> _showCurrentScanReport() async {
     if (_analysisResults == null) return;
+    if (_scanId != null) {
+      final report = await ApiService.createComplianceReport(_scanId!);
+      if (!mounted) return;
+      final downloadUrl = report['download_url']?.toString();
+      if (downloadUrl != null && report['status'] != 'ERROR') {
+        ReportViewer.showStoredPdfDialog(
+          context: context,
+          reportCode: report['report_code']?.toString() ?? 'TLR-$_scanId',
+          pdfBytes: ApiService.getBytes(downloadUrl),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(report['error']?.toString() ?? 'The persisted report could not be created.')));
+      return;
+    }
     final notes = StringBuffer('Category: $_selectedCategory\n\n');
     for (var index = 0; index < _analysisResults!.length; index++) {
       final result = Map<String, dynamic>.from(_analysisResults![index] as Map);
@@ -350,7 +398,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Demo Mode: Scanner is powered by OCR.space and Label Generator is powered by Gemini API.',
+                      'Demo mode uses local, deterministic processing. If optional local OCR is not configured, the scan remains unresolved and asks for a clear close-up or manual confirmation.',
                       style: TextStyle(color: Colors.orange.shade800, fontSize: 12, fontStyle: FontStyle.italic),
                     ),
                   ),
@@ -398,7 +446,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   Text('Upload clear, straight-on photos of the front, back and other package sides. Text-size values are rough estimates and are not used to determine scan status.',
                     textAlign: TextAlign.center, style: TextStyle(color: textMuted, fontSize: 14)),
                   const SizedBox(height: 8),
-                  Text('This resource-constrained setup uses OCR.Space for text recognition and sends selected package photos to that service. Configure OCR_SPACE_API_KEY on the backend. PaddleOCR is available as a local open-source option on a host with more memory.',
+                  Text('Package photos stay within this deployment. Optional PaddleOCR is disabled unless an operator configures it; without it, uploaded images are retained as evidence and the scan asks for a clear crop or manual confirmation.',
                     textAlign: TextAlign.center, style: TextStyle(color: textMuted, fontSize: 12)),
                   SizedBox(height: 24),
                   Row(
@@ -487,7 +535,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
             SizedBox(height: 32),
             Text(_processingText, style: TextStyle(color: textColor, fontSize: 20, fontWeight: FontWeight.bold)),
             SizedBox(height: 16),
-            Text("Reading package declarations. Images may be processed by the configured OCR service.", textAlign: TextAlign.center, style: TextStyle(color: Colors.greenAccent, fontSize: 14)),
+            Text("Assessing image quality and reading package declarations when local OCR is available.", textAlign: TextAlign.center, style: TextStyle(color: Colors.greenAccent, fontSize: 14)),
           ],
         ),
       ),
@@ -526,7 +574,7 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Demo Mode: Scanner is powered by OCR.space and Label Generator is powered by Gemini API.',
+                      'This is evidence-backed screening, not a legal certificate. Unread or uncertain declarations stay unresolved instead of being marked as violations.',
                       style: TextStyle(color: Colors.orange.shade800, fontSize: 12, fontStyle: FontStyle.italic),
                     ),
                   ),
@@ -588,7 +636,15 @@ class __BusinessOwnerScannerScreenState extends State<_BusinessOwnerScannerScree
                         icon: Icon(Icons.auto_awesome, color: Colors.white),
                         label: Text('CREATE A LABEL DRAFT', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
-                    )
+                    ),
+                    if (_scanId != null) ...[
+                      SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: _submitClarification,
+                        icon: const Icon(Icons.add_a_photo_outlined),
+                        label: const Text('ADD A CLEAR DECLARATION CLOSE-UP'),
+                      ),
+                    ],
                   ]
                 ],
               ),
@@ -883,6 +939,7 @@ class __AILabelGeneratorScreenState extends State<_AILabelGeneratorScreen> with 
       missingTagValues: tagValues,
       additionalDetails: _additionalDetailsController.text.trim(),
       sideCount: _sideCount,
+      sourceScanId: widget.sourceScanId,
     );
 
     if (!mounted) return;

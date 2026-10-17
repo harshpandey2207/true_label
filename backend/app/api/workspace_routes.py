@@ -7,9 +7,15 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.security import get_current_user, hash_password, require_roles
 from backend.app.db.database import get_db
-from backend.app.db.models import AuditEvent, ComplianceRule, LabelDraftRecord, NoticeRecord, PaymentRecord, ProductCategory, ProductRecord, ScanRecord, UserAccount
+from backend.app.db.models import AuditEvent, ComplianceRule, EscalationCase, LabelDraftRecord, NoticeRecord, PaymentRecord, ProductCategory, ProductRecord, ScanRecord, UserAccount
 
 router = APIRouter(tags=["Workspace"])
+
+
+def _timestamp(value) -> str | None:
+    return value.isoformat() + "Z" if value is not None else None
+
+
 class ProductInput(BaseModel):
     name: str = Field(min_length=2, max_length=160)
     category: str = Field(min_length=2, max_length=120)
@@ -42,6 +48,15 @@ class InspectorCreate(BaseModel):
     password: str = Field(min_length=10, max_length=128)
 
 
+class EscalationInput(BaseModel):
+    scan_id: int = Field(gt=0)
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class EscalationStatusUpdate(BaseModel):
+    status: str = Field(pattern="^(open|in_review|resolved|closed)$")
+
+
 def _payment_payload(record: PaymentRecord) -> dict:
     return {
         "id": record.id,
@@ -50,7 +65,7 @@ def _payment_payload(record: PaymentRecord) -> dict:
         "currency": record.currency,
         "status": record.status,
         "external_reference": record.external_reference,
-        "created_at": record.created_at.isoformat() + "Z",
+        "created_at": _timestamp(record.created_at),
     }
 
 
@@ -61,8 +76,8 @@ def _product_payload(product: ProductRecord) -> dict:
         "category": product.category,
         "sku": product.sku,
         "declarations": product.declarations or {},
-        "created_at": product.created_at.isoformat() + "Z",
-        "updated_at": product.updated_at.isoformat() + "Z",
+        "created_at": _timestamp(product.created_at),
+        "updated_at": _timestamp(product.updated_at),
     }
 
 
@@ -77,7 +92,7 @@ def workspace_summary(user: UserAccount = Depends(get_current_user), db: Session
         product_query = db.query(ProductRecord).filter(ProductRecord.user_id == user.id)
         user_count = None
     total_scans = scan_query.count()
-    flagged_scans = scan_query.filter(ScanRecord.status == "POTENTIAL_ISSUES").count()
+    flagged_scans = scan_query.filter(ScanRecord.status != "NO_FLAGS").count()
     product_count = product_query.count()
     result = {
         "scan_count": total_scans,
@@ -85,10 +100,68 @@ def workspace_summary(user: UserAccount = Depends(get_current_user), db: Session
         "no_flags_scan_count": total_scans - flagged_scans,
         "product_count": product_count,
         "generated_label_count": db.query(LabelDraftRecord).filter(LabelDraftRecord.user_id == user.id).count(),
+        "open_escalation_count": db.query(EscalationCase).filter(EscalationCase.status.in_(["open", "in_review"])).count() if user.role in {"admin", "inspector"} else 0,
     }
     if user_count is not None:
         result["active_user_count"] = user_count
     return result
+
+
+def _case_payload(case: EscalationCase, scan: ScanRecord) -> dict:
+    return {
+        "id": case.id,
+        "scan_id": case.scan_id,
+        "category": scan.category,
+        "scan_status": scan.status,
+        "status": case.status,
+        "note": case.note,
+        "created_by_user_id": case.created_by_user_id,
+        "created_at": _timestamp(case.created_at),
+        "updated_at": _timestamp(case.updated_at),
+    }
+
+
+@router.post("/escalations", status_code=201)
+def create_escalation(payload: EscalationInput, user: UserAccount = Depends(require_roles("inspector", "admin")), db: Session = Depends(get_db)):
+    scan = db.query(ScanRecord).filter(ScanRecord.id == payload.scan_id).first()
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Scan not found.")
+    existing = db.query(EscalationCase).filter(EscalationCase.scan_id == scan.id, EscalationCase.status.in_(["open", "in_review"])).first()
+    if existing is not None:
+        return _case_payload(existing, scan)
+    case = EscalationCase(scan_id=scan.id, created_by_user_id=user.id, note=payload.note.strip() if payload.note else None)
+    db.add(case)
+    db.flush()
+    db.add(AuditEvent(user_id=user.id, action="scan.escalated", entity_type="escalation_case", entity_id=str(case.id), details={"scan_id": scan.id}))
+    db.commit()
+    db.refresh(case)
+    return _case_payload(case, scan)
+
+
+@router.get("/escalations")
+def list_escalations(user: UserAccount = Depends(require_roles("inspector", "admin")), db: Session = Depends(get_db), limit: int = 100):
+    rows = db.query(EscalationCase).order_by(EscalationCase.updated_at.desc()).limit(min(max(limit, 1), 200)).all()
+    payloads = []
+    for case in rows:
+        scan = db.query(ScanRecord).filter(ScanRecord.id == case.scan_id).first()
+        if scan is not None:
+            payloads.append(_case_payload(case, scan))
+    return {"items": payloads}
+
+
+@router.patch("/escalations/{case_id}")
+def update_escalation(case_id: int, payload: EscalationStatusUpdate, user: UserAccount = Depends(require_roles("admin")), db: Session = Depends(get_db)):
+    case = db.query(EscalationCase).filter(EscalationCase.id == case_id).first()
+    if case is None:
+        raise HTTPException(status_code=404, detail="Escalation case not found.")
+    scan = db.query(ScanRecord).filter(ScanRecord.id == case.scan_id).first()
+    if scan is None:
+        raise HTTPException(status_code=404, detail="Related scan not found.")
+    case.status = payload.status
+    db.add(AuditEvent(user_id=user.id, action="escalation.status_updated", entity_type="escalation_case", entity_id=str(case.id), details={"status": payload.status}))
+    db.commit()
+    db.refresh(case)
+    return _case_payload(case, scan)
 
 
 @router.get("/scans")
@@ -104,7 +177,7 @@ def list_scans(user: UserAccount = Depends(get_current_user), db: Session = Depe
         "status": row.status,
         "result": row.result,
         "image_names": row.image_names,
-        "created_at": row.created_at.isoformat() + "Z",
+        "created_at": _timestamp(row.created_at),
     } for row in records]}
 
 
@@ -151,7 +224,7 @@ def list_label_drafts(user: UserAccount = Depends(get_current_user), db: Session
         "source_scan_id": row.source_scan_id,
         "label_data": row.label_data,
         "warnings": row.warnings,
-        "created_at": row.created_at.isoformat() + "Z",
+        "created_at": _timestamp(row.created_at),
     } for row in rows]}
 
 
@@ -167,7 +240,7 @@ def list_audit_events(user: UserAccount = Depends(get_current_user), db: Session
         "entity_type": row.entity_type,
         "entity_id": row.entity_id,
         "details": row.details,
-        "created_at": row.created_at.isoformat() + "Z",
+        "created_at": _timestamp(row.created_at),
     } for row in rows]}
 
 
@@ -181,7 +254,7 @@ def admin_list_users(user: UserAccount = Depends(require_roles("admin")), db: Se
         "role": row.role,
         "organization_name": row.organization_name,
         "is_active": row.is_active,
-        "created_at": row.created_at.isoformat() + "Z",
+        "created_at": _timestamp(row.created_at),
     } for row in rows]}
 
 
@@ -226,8 +299,12 @@ def admin_list_rules(user: UserAccount = Depends(require_roles("admin", "inspect
         "tag": rule.tag,
         "is_mandatory": rule.is_mandatory,
         "legal_act_reference": rule.legal_act_reference,
-        "source_url": "https://fssai.gov.in/food-law/regulations/amendments/labelling-display" if names.get(rule.category_id) == "Food & Beverages" else "https://consumeraffairs.gov.in/pages/legal-metrology-act",
-        "automated_scope": "OCR checks for the presence of declaration text; applicability, exemptions, exact format, prominence and current amendments require review.",
+        "source_url": rule.source_url,
+        "rule_version": rule.rule_version,
+        "effective_from": rule.effective_from,
+        "review_status": rule.review_status,
+        "evidence_requirement": rule.evidence_requirement,
+        "automated_scope": "Evidence-aware presence checks only. Applicability, exemptions, exact format, prominence and current amendments require human review.",
     } for rule in rules]}
 
 
@@ -258,7 +335,7 @@ def list_notices(user: UserAccount = Depends(get_current_user), db: Session = De
         "title": row.title,
         "body": row.body,
         "status": row.status,
-        "created_at": row.created_at.isoformat() + "Z",
+        "created_at": _timestamp(row.created_at),
     } for row in rows]}
 
 
@@ -270,7 +347,7 @@ def create_notice(payload: NoticeInput, user: UserAccount = Depends(get_current_
     db.add(AuditEvent(user_id=user.id, action="review_note.created", entity_type="review_note", entity_id=str(notice.id), details={}))
     db.commit()
     db.refresh(notice)
-    return {"id": notice.id, "title": notice.title, "body": notice.body, "status": notice.status, "created_at": notice.created_at.isoformat() + "Z"}
+    return {"id": notice.id, "title": notice.title, "body": notice.body, "status": notice.status, "created_at": _timestamp(notice.created_at)}
 
 
 @router.get("/billing/plans")

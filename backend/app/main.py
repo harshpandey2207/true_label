@@ -4,6 +4,7 @@ from backend.app.api.scan_routes import router as scan_router
 from backend.app.api.label_routes import router as label_router
 from backend.app.api.auth_routes import router as auth_router
 from backend.app.api.workspace_routes import router as workspace_router
+from backend.app.api.report_routes import router as report_router
 
 
 # Database imports
@@ -31,7 +32,7 @@ def root():
     return {
         "status": "ONLINE",
         "service": "True Label Package Label Screening API",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "docs": "/docs"
     }
 
@@ -44,4 +45,5 @@ app.include_router(scan_router, prefix="/scan", tags=["Scan"])
 app.include_router(label_router, prefix="/label", tags=["Label Generator"])
 app.include_router(auth_router, prefix="/auth", tags=["Accounts"])
 app.include_router(workspace_router, prefix="/workspace", tags=["Workspace"])
+app.include_router(report_router, prefix="/reports", tags=["Reports"])
 

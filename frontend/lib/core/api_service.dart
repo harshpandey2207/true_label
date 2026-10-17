@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
-  static const String defaultUrl = 'http://127.0.0.1:8000';
+  // Production fallback for the existing Vercel deployment. Local developers
+  // can still override this with API_BASE_URL in frontend/.env.
+  static const String defaultUrl = 'https://true-label-backend.onrender.com';
 
   static String get baseUrl {
     return dotenv.env['API_BASE_URL'] ?? defaultUrl;
@@ -22,13 +25,16 @@ class ApiService {
     required double distanceMm,
     required double focalLengthPx,
     required String categoryName,
+    int? scanId,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/scan/analyze-ar'));
+      request.headers.addAll(_authHeaders);
       
       request.fields['distance_mm'] = distanceMm.toString();
       request.fields['focal_length_px'] = focalLengthPx.toString();
       request.fields['category_name'] = categoryName;
+      if (scanId != null) request.fields['scan_id'] = scanId.toString();
 
       // Loop through all selected images and append them to the multipart request
       for (var imageFile in imageFiles) {
@@ -75,9 +81,11 @@ class ApiService {
     required Map<String, String> missingTagValues,
     required String additionalDetails,
     required int sideCount,
+    int? sourceScanId,
   }) async {
     try {
       var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/label/generate'));
+      request.headers.addAll(_authHeaders);
 
       request.fields['product_name'] = productName;
       request.fields['product_category'] = productCategory;
@@ -87,6 +95,7 @@ class ApiService {
       request.fields['missing_tag_values'] = jsonEncode(missingTagValues);
       request.fields['additional_details'] = additionalDetails;
       request.fields['side_count'] = sideCount.toString();
+      if (sourceScanId != null) request.fields['source_scan_id'] = sourceScanId.toString();
 
       for (var imageFile in imageFiles) {
         var bytes = await imageFile.readAsBytes();
@@ -136,6 +145,35 @@ class ApiService {
       return {'status': 'ERROR', 'error': 'Backend error'};
     } catch (e) {
       return {'status': 'ERROR', 'error': 'Connection error: ' + e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> patchJson(String path, Map<String, dynamic> body) async {
+    try {
+      final response = await http.patch(
+        Uri.parse(baseUrl + path),
+        headers: {'Content-Type': 'application/json', ..._authHeaders},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200 || response.statusCode == 201) return Map<String, dynamic>.from(jsonDecode(response.body) as Map);
+      dynamic detail;
+      try { detail = jsonDecode(response.body)['detail']; } catch (_) {}
+      return {'status': 'ERROR', 'error': detail?.toString() ?? 'Backend error (${response.statusCode}).'};
+    } catch (e) {
+      return {'status': 'ERROR', 'error': 'Connection error: ' + e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> createComplianceReport(int scanId) {
+    return postJson('/reports/scans/$scanId', const <String, dynamic>{});
+  }
+
+  static Future<Uint8List?> getBytes(String path) async {
+    try {
+      final response = await http.get(Uri.parse(baseUrl + path), headers: _authHeaders).timeout(const Duration(seconds: 30));
+      return response.statusCode == 200 ? response.bodyBytes : null;
+    } catch (_) {
+      return null;
     }
   }
 

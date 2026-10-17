@@ -30,6 +30,8 @@ build/
 .DS_Store
 Thumbs.db
 *.log
+true_label_integration_test.db
+true_label_runtime_test.db
 
 # Mobile build artifacts
 **/android/app/debug
