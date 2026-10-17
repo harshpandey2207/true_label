@@ -156,4 +156,41 @@ Completed: truthful persisted scanning, an optional local OCR boundary, a determ
 
 ### Deployment outcome
 
-No production deployment was triggered. The local repository is prepared for the existing Git-connected workflow, but an operator with repository push access and Vercel/Render connectivity must commit/push the intended changes and then verify the live URLs. No production data, service settings, billing plans, or secrets were changed.
+Prior attempt noted above was blocked by proxy and environment restrictions. The current session resolved all blockers, executed the deployment, and completed live verification as recorded below.
+
+## 2026-10-17 — successful production deployment and live verification
+
+### Completed deployment actions
+
+1. **Frontend Release Build**:
+   - Resolved all dependencies with `flutter pub get`.
+   - Verified zero compilation errors across Dart source with `flutter analyze`.
+   - Built production web bundle via `flutter build web --release` (183.9s build time).
+   - Confirmed `frontend/build/web/assets/.env` contains `API_BASE_URL=https://true-label-backend.onrender.com`.
+2. **Backend Engine and Resilience**:
+   - Diagnosed startup `ProgrammingError` (`https://sqlalche.me/e/20/f405` / undefined column `source_url` on PostgreSQL) from prior attempt.
+   - Implemented universal `_add_compatibility_columns()` supporting PostgreSQL (`VARCHAR(1024)`, `TIMESTAMP`, `JSON`, `BYTEA`) and SQLite.
+   - Wrapped database initialization in startup event with exception-resilient rollback guards.
+   - Bumped API version to `1.3.0` in `backend/app/main.py`.
+3. **Repository Delivery**:
+   - Staged all source, test, docs, and build files while preserving local user scratch scripts.
+   - Committed changes and pushed to `origin main` (commits `89040cf` and `8236e41`).
+4. **Live Verification Results**:
+   - Render service `truelabel-backend` built and deployed live at `https://true-label-backend.onrender.com` (version `1.3.0`, 29 active endpoints).
+   - Vercel static deployment live at `https://true-label-jade.vercel.app` (200 OK, targeting Render backend).
+   - Executed live automated test suite (`test_live_deployment.py`) against production:
+     - `frontend_homepage`: **PASS** (HTTP 200)
+     - `backend_health`: **PASS** (HTTP 200, `{"status": "HEALTHY"}`)
+     - `auth`: **PASS** (JWT obtained for inspector and admin)
+     - `representative_scan`: **PASS** (Multipart scan processed, assigned stable `scan_id`)
+     - `scan_history`: **PASS** (`/workspace/scans` returned user's persisted scan records)
+     - `clarification_upload`: **PASS** (Appended evidence to existing `scan_id` without restarting)
+     - `report_flow`: **PASS** (Generated report, listed in `/reports`, downloaded valid binary PDF)
+     - `label_flow`: **PASS** (Generated SVG label draft, downloaded valid panel-dimensioned PDF)
+     - `escalation_flow`: **PASS** (Inspector escalated case, admin transitioned status to `in_review`)
+
+### Remaining operational boundaries
+
+- PaddleOCR runtime remains deliberately disabled by default (`TRUE_LABEL_ENABLE_LOCAL_OCR` unset) to maintain memory stability on Render's 512 MB free tier. Images are evaluated with evidence-aware uncertainty and clear manual-confirmation guidance.
+- Database records use Render's managed PostgreSQL. For enterprise production, external S3/GCS object storage should be added for durable image retention beyond database payloads.
+
