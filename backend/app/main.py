@@ -15,9 +15,12 @@ app = FastAPI(title="True Label Legal Metrology API")
 
 @app.on_event("startup")
 def on_startup():
-    db = SessionLocal()
-    init_db(db)
-    db.close()
+    try:
+        db = SessionLocal()
+        init_db(db)
+        db.close()
+    except Exception as e:
+        print(f"Startup database initialization note: {e}")
 
 app.add_middleware(
     CORSMiddleware,
