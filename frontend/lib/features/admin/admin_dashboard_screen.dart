@@ -193,12 +193,20 @@ class _OverviewScreenState extends State<_OverviewScreen> {
           );
         }
         final data = snapshot.data ?? const <String, dynamic>{};
-        final total = (data['scan_count'] as num?)?.toInt() ?? 0;
-        final pass = (data['pass_scan_count'] as num?)?.toInt() ?? 0;
-        final unresolved =
-            (data['unresolved_scan_count'] as num?)?.toInt() ?? 0;
-        final violations =
-            (data['confirmed_violation_count'] as num?)?.toInt() ?? 0;
+        final liveTotal = (data['scan_count'] as num?)?.toInt() ?? 0;
+        final demoMode = liveTotal == 0;
+        // With an empty backend, keep the overview numerically consistent
+        // with the sample regional chart and heatmap below.
+        final total = demoMode ? totalScans : liveTotal;
+        final pass = demoMode
+            ? totalCompliant
+            : (data['pass_scan_count'] as num?)?.toInt() ?? 0;
+        final unresolved = demoMode
+            ? 0
+            : (data['unresolved_scan_count'] as num?)?.toInt() ?? 0;
+        final violations = demoMode
+            ? totalViolations
+            : (data['confirmed_violation_count'] as num?)?.toInt() ?? 0;
         final categories = (data['by_category'] as List?) ?? const [];
         return RefreshIndicator(
           onRefresh: () async => setState(_load),
@@ -208,7 +216,9 @@ class _OverviewScreenState extends State<_OverviewScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Live compliance overview',
+                      demoMode
+                          ? 'Sample compliance overview'
+                          : 'Live compliance overview',
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -222,7 +232,11 @@ class _OverviewScreenState extends State<_OverviewScreen> {
                 ],
               ),
               Text(
-                'Operational counts from persisted scans, reports and review cases.',
+                demoMode
+                    ? data['status'] == 'ERROR'
+                          ? 'Live metrics are unavailable; illustrative sample totals below match the regional chart and heatmap.'
+                          : 'Illustrative sample totals match the regional chart and heatmap; no live scans are recorded yet.'
+                    : 'Operational counts from persisted scans, reports and review cases.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -324,7 +338,9 @@ class _OverviewScreenState extends State<_OverviewScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Workspace coverage',
+                        demoMode
+                            ? 'Sample workspace coverage'
+                            : 'Workspace coverage',
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -336,27 +352,37 @@ class _OverviewScreenState extends State<_OverviewScreen> {
                         children: [
                           _AdminCount(
                             label: 'Users',
-                            value: '${data['user_count'] ?? 0}',
+                            value: demoMode
+                                ? '3 demo'
+                                : '${data['user_count'] ?? 0}',
                             icon: Icons.people_outline,
                           ),
                           _AdminCount(
                             label: 'Categories',
-                            value: '${data['category_count'] ?? 0}',
+                            value: demoMode
+                                ? '${productCategories.length} demo'
+                                : '${data['category_count'] ?? 0}',
                             icon: Icons.category_outlined,
                           ),
                           _AdminCount(
                             label: 'Rules',
-                            value: '${data['rule_count'] ?? 0}',
+                            value: demoMode
+                                ? '186 demo'
+                                : '${data['rule_count'] ?? 0}',
                             icon: Icons.rule_outlined,
                           ),
                           _AdminCount(
                             label: 'Reports',
-                            value: '${data['report_count'] ?? 0}',
+                            value: demoMode
+                                ? '$totalViolations demo'
+                                : '${data['report_count'] ?? 0}',
                             icon: Icons.picture_as_pdf_outlined,
                           ),
                           _AdminCount(
                             label: 'Escalations',
-                            value: '${data['escalation_count'] ?? 0}',
+                            value: demoMode
+                                ? '$totalViolations demo'
+                                : '${data['escalation_count'] ?? 0}',
                             icon: Icons.escalator_warning_outlined,
                           ),
                         ],

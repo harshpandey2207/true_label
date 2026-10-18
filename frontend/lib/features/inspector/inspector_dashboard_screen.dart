@@ -1367,11 +1367,33 @@ class _InspectorAnalyticsScreenState extends State<_InspectorAnalyticsScreen> {
         final counts = <String, int>{};
         final categories = <String, int>{};
         for (final row in rows) {
-          final status = row['status']?.toString() ?? 'POTENTIAL_ISSUES';
-          counts[status] = (counts[status] ?? 0) + 1;
+          final result = Map<String, dynamic>.from(
+            (row['result'] as Map?) ?? const {},
+          );
+          final outcome = result['overall_status']?.toString() ??
+              (row['status']?.toString() == 'NO_FLAGS' ? 'PASS' : 'UNRESOLVED');
+          counts[outcome] = (counts[outcome] ?? 0) + 1;
           final category = row['category']?.toString() ?? 'Unknown category';
           categories[category] = (categories[category] ?? 0) + 1;
         }
+        final demoPreview = rows.isEmpty;
+        final chartCounts = demoPreview
+            ? const <String, int>{
+                'PASS': 8,
+                'UNRESOLVED': 3,
+                'CONFIRMED_VIOLATION': 1,
+                'NOT_APPLICABLE': 0,
+              }
+            : counts;
+        final chartCategories = demoPreview
+            ? const <String, int>{
+                'Food & Beverages': 4,
+                'General Packaged Commodity': 3,
+                'Cosmetics, Ointments & Pharma Goods': 2,
+                'Electronics & Appliances': 2,
+                'Medical Devices': 1,
+              }
+            : categories;
         return RefreshIndicator(
           onRefresh: () async {
             setState(_load);
@@ -1383,7 +1405,9 @@ class _InspectorAnalyticsScreenState extends State<_InspectorAnalyticsScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Live inspection analytics',
+                      demoPreview
+                          ? 'My inspection analysis'
+                          : 'Live inspection analytics',
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -1396,7 +1420,9 @@ class _InspectorAnalyticsScreenState extends State<_InspectorAnalyticsScreen> {
                 ],
               ),
               Text(
-                'Derived from persisted scans visible to this inspector account.',
+                demoPreview
+                    ? 'No live inspections are recorded for this account. Charts below show an illustrative demo preview.'
+                    : 'Derived from persisted scans visible to this inspector account.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -1414,13 +1440,13 @@ class _InspectorAnalyticsScreenState extends State<_InspectorAnalyticsScreen> {
                   ),
                   _InspectorMetric(
                     label: 'Passed',
-                    value: '${counts['NO_FLAGS'] ?? 0}',
+                    value: '${counts['PASS'] ?? 0}',
                     icon: Icons.verified_outlined,
                     color: Colors.green,
                   ),
                   _InspectorMetric(
                     label: 'Unresolved',
-                    value: '${counts['POTENTIAL_ISSUES'] ?? 0}',
+                    value: '${counts['UNRESOLVED'] ?? 0}',
                     icon: Icons.help_outline,
                     color: Colors.orange,
                   ),
@@ -1433,38 +1459,115 @@ class _InspectorAnalyticsScreenState extends State<_InspectorAnalyticsScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final cardWidth = constraints.maxWidth >= 860
+                      ? (constraints.maxWidth - 16) / 2
+                      : constraints.maxWidth;
+                  final outcomes = [
+                    ('Passed', chartCounts['PASS'] ?? 0, Colors.teal),
+                    ('Needs review', chartCounts['UNRESOLVED'] ?? 0, Colors.orange),
+                    ('Confirmed issue', chartCounts['CONFIRMED_VIOLATION'] ?? 0, Colors.deepOrange),
+                    ('Not applicable', chartCounts['NOT_APPLICABLE'] ?? 0, Colors.blueGrey),
+                  ];
+                  final rankedCategories = chartCategories.entries.toList()
+                    ..sort((a, b) => b.value.compareTo(a.value));
+                  final shownCategories = rankedCategories.take(5).toList();
+                  final maxCategoryCount = shownCategories.isEmpty
+                      ? 1.0
+                      : shownCategories.map((entry) => entry.value).reduce((a, b) => a > b ? a : b).toDouble() + 1;
+                  return Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
                     children: [
-                      Text(
-                        'Scans by product profile',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      if (categories.isEmpty)
-                        const Text('No scans yet.')
-                      else
-                        ...categories.entries.map(
-                          (entry) => ListTile(
-                            contentPadding: EdgeInsets.zero,
-                            leading: const Icon(Icons.category_outlined),
-                            title: Text(entry.key),
-                            trailing: Text(
-                              '${entry.value}',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                      SizedBox(
+                        width: cardWidth,
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(demoPreview ? 'Outcome mix · demo preview' : 'Inspection outcome mix', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  height: 190,
+                                  child: PieChart(PieChartData(
+                                    centerSpaceRadius: 42,
+                                    sectionsSpace: 3,
+                                    sections: [
+                                      for (final outcome in outcomes)
+                                        PieChartSectionData(
+                                          value: outcome.$2 == 0 ? 0.001 : outcome.$2.toDouble(),
+                                          color: outcome.$3,
+                                          title: outcome.$2 == 0 ? '' : '${outcome.$2}',
+                                          radius: 48,
+                                          titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                        ),
+                                    ],
+                                  )),
+                                ),
+                                for (final outcome in outcomes)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 6),
+                                    child: Row(children: [
+                                      Container(width: 10, height: 10, decoration: BoxDecoration(color: outcome.$3, shape: BoxShape.circle)),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text(outcome.$1)),
+                                      Text('${outcome.$2}', style: const TextStyle(fontWeight: FontWeight.w700)),
+                                    ]),
+                                  ),
+                              ],
                             ),
                           ),
                         ),
+                      ),
+                      SizedBox(
+                        width: cardWidth,
+                        child: Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(demoPreview ? 'Product profiles · demo preview' : 'Scans by product profile', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 12),
+                                SizedBox(
+                                  height: 255,
+                                  child: BarChart(BarChartData(
+                                    maxY: maxCategoryCount,
+                                    gridData: const FlGridData(show: true, drawVerticalLine: false),
+                                    borderData: FlBorderData(show: false),
+                                    titlesData: FlTitlesData(
+                                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                                      leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 28)),
+                                      bottomTitles: AxisTitles(sideTitles: SideTitles(
+                                        showTitles: true,
+                                        reservedSize: 46,
+                                        getTitlesWidget: (value, meta) {
+                                          final index = value.toInt();
+                                          if (index < 0 || index >= shownCategories.length) return const SizedBox.shrink();
+                                          final name = shownCategories[index].key;
+                                          final shortName = name.length > 11 ? '${name.substring(0, 9)}…' : name;
+                                          return Padding(padding: const EdgeInsets.only(top: 7), child: Text(shortName, style: theme.textTheme.labelSmall, textAlign: TextAlign.center));
+                                        },
+                                      )),
+                                    ),
+                                    barGroups: [
+                                      for (var index = 0; index < shownCategories.length; index++)
+                                        BarChartGroupData(x: index, barRods: [BarChartRodData(toY: shownCategories[index].value.toDouble(), width: 22, borderRadius: BorderRadius.circular(4), color: theme.colorScheme.primary)]),
+                                    ],
+                                  )),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
-                  ),
-                ),
+                  );
+                },
               ),
             ],
           ),

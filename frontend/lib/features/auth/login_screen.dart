@@ -88,24 +88,20 @@ class LoginScreen extends StatelessWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 58,
-                          height: 58,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(colors: [accent, accentBlue]),
-                            borderRadius: BorderRadius.circular(18),
-                            boxShadow: [BoxShadow(color: accent.withValues(alpha: .25), blurRadius: 24, offset: const Offset(0, 10))],
-                          ),
-                          child: const Icon(Icons.verified_rounded, color: Colors.white, size: 32),
+                        Image.asset(
+                          'assets/images/logo.png',
+                          width: 104,
+                          height: 104,
+                          fit: BoxFit.contain,
                         ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('True Label', style: TextStyle(color: textColor, fontSize: 34, fontWeight: FontWeight.w800, letterSpacing: -.6)),
-                              const SizedBox(height: 4),
-                              Text('Evidence-led label screening for India', style: TextStyle(color: muted, fontSize: 15)),
+                              Text('Evidence-led label screening for India', style: TextStyle(color: textColor, fontSize: 18, fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 6),
+                              Text('Scan · Understand · Consume safely', style: TextStyle(color: muted, fontSize: 14)),
                             ],
                           ),
                         ),
