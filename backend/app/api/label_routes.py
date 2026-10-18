@@ -12,6 +12,12 @@ from backend.app.services.ai_engine.label_generator import (
     CATEGORIES,
     generate_label_draft,
     render_label_pdf,
+    sample_reference_palette,
+)
+from backend.app.services.ai_engine.design_assistant import (
+    DesignAssistantError,
+    design_assistant_status,
+    generate_design_direction,
 )
 from backend.app.services.ai_engine.rule_engine import RULE_ENGINE_VERSION, UNRESOLVED, evaluate_rules, overall_status
 
@@ -25,6 +31,12 @@ def list_label_categories():
     return {"categories": CATEGORIES}
 
 
+@router.get("/design-status")
+def label_design_status():
+    """Report optional AI design availability without exposing credentials."""
+    return design_assistant_status()
+
+
 @router.post("/generate")
 async def generate_label(
     images: Optional[List[UploadFile]] = File(default=None),
@@ -36,11 +48,12 @@ async def generate_label(
     missing_tag_values: str = Form("{}"),
     additional_details: str = Form("", max_length=3000),
     side_count: int = Form(2),
+    use_ai_design: bool = Form(False),
     source_scan_id: Optional[int] = Form(None),
     user: Optional[UserAccount] = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    """Generate a local SVG draft from form values and optional reference images."""
+    """Generate an editable vector draft, optionally using AI style direction."""
     try:
         tag_values: Any = json.loads(missing_tag_values or "{}")
     except json.JSONDecodeError:
@@ -77,6 +90,28 @@ async def generate_label(
             image_inputs = [(evidence.filename, evidence.payload) for evidence in source_scan.evidence]
 
     try:
+        design_spec = None
+        if use_ai_design:
+            if user is None:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Sign in to use the optional AI design service.",
+                )
+            if not design_assistant_status()["configured"]:
+                raise HTTPException(
+                    status_code=503,
+                    detail="AI label design is not configured. Set TRUE_LABEL_GEMINI_API_KEY in the backend environment, restart the API, then retry.",
+                )
+            try:
+                design_spec = await generate_design_direction(
+                    category=product_category,
+                    shape=shape,
+                    dimensions=dimensions,
+                    design_brief=custom_prompt,
+                    sampled_palette=sample_reference_palette(image_inputs),
+                )
+            except DesignAssistantError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
         result = generate_label_draft(
             product_name=product_name,
             product_category=product_category,
@@ -87,9 +122,12 @@ async def generate_label(
             additional_details=additional_details,
             images=image_inputs,
             side_count=side_count,
+            design_spec=design_spec,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=500, detail="The local renderer could not create this label draft.")
 

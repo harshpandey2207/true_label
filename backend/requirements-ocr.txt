@@ -1,0 +1,6 @@
+# Optional local OCR for developer workstations. RapidOCR is the preferred
+# path because its ONNX models are packaged with the wheel; PaddleOCR remains
+# available when its runtime and model assets are intentionally provisioned.
+rapidocr_onnxruntime==1.4.4
+onnxruntime==1.17.1
+protobuf==3.20.2

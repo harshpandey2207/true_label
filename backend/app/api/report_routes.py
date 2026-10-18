@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
@@ -33,7 +35,11 @@ def create_report(scan_id: int, user: UserAccount | None = Depends(get_optional_
     if scan is None or not _can_access(scan, user):
         raise HTTPException(status_code=404, detail="Scan not found.")
     pdf, summary = render_compliance_report(scan)
-    report = ComplianceReportRecord(scan_id=scan.id, report_code=f"TLR-{scan.id}-{len(pdf):x}", content=summary, pdf_payload=pdf)
+    # A scan may be reopened and reported more than once. Include a UTC
+    # timestamp so each persisted report has a stable, human-readable code
+    # without colliding on the same scan and PDF length.
+    report_code = f"TLR-{scan.id}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+    report = ComplianceReportRecord(scan_id=scan.id, report_code=report_code, content=summary, pdf_payload=pdf)
     db.add(report)
     db.commit()
     db.refresh(report)

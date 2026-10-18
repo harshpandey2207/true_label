@@ -36,25 +36,26 @@ class TrueLabelApp extends StatelessWidget {
       title: 'True Label',
       debugShowCheckedModeBanner: false,
       themeMode: themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
-      theme: ThemeData.light().copyWith(
-        scaffoldBackgroundColor: const Color(0xFFF5F5F5),
+      theme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0F766E), brightness: Brightness.light),
+        scaffoldBackgroundColor: const Color(0xFFF4F8F7),
         textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
-        colorScheme: const ColorScheme.light(
-          primary: Colors.blueAccent,
-          surface: Colors.white,
-        ),
-        cardColor: Colors.white,
+        cardTheme: CardThemeData(color: Colors.white, elevation: 1, margin: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+        inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: Colors.white),
       ),
-      darkTheme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF121212),
+      darkTheme: ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2DD4BF), brightness: Brightness.dark),
+        scaffoldBackgroundColor: const Color(0xFF0E171D),
         textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-        colorScheme: const ColorScheme.dark(
-          primary: Colors.blueAccent,
-          surface: Color(0xFF1E1E1E),
-        ),
-        cardColor: const Color(0xFF1E1E1E),
+        cardTheme: CardThemeData(color: const Color(0xFF16232B), elevation: 1, margin: EdgeInsets.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
+        inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)), filled: true, fillColor: const Color(0xFF16232B)),
       ),
       home: const LoginScreen(),
+      routes: {
+        '/login': (_) => const LoginScreen(),
+      },
     );
   }
 }

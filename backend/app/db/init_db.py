@@ -16,10 +16,21 @@ def init_db(db: Session):
         category_descriptions = {
             "General Packaged Commodity": "Standard consumer goods",
             "Food & Beverages": "Food and beverages",
+            "Packaged Drinking Water": "Packaged drinking and mineral water",
             "Electronics & Appliances": "Electronic devices and appliances",
+            "Electrical Cables & Accessories": "Cables, chargers, plugs and electrical accessories",
             "Cosmetics, Ointments & Pharma Goods": "Cosmetics and pharmaceutical goods",
+            "Personal Care Products": "Soaps, shampoos, oral care and personal care products",
+            "Household Cleaning Products": "Detergents, cleaners and household chemicals",
             "Apparel & Textiles": "Clothing and textile products",
+            "Footwear & Leather Goods": "Footwear, bags and leather goods",
+            "Toys & Childcare Products": "Toys, games and childcare products",
             "Medical Devices": "Medical devices",
+            "Automotive Components & Lubricants": "Automotive parts, fluids and lubricants",
+            "Tobacco & Nicotine Products": "Tobacco and nicotine products",
+            "Stationery & School Supplies": "Stationery, writing and school supplies",
+            "Agricultural Inputs": "Seeds, fertilisers and agricultural inputs",
+            "Other / Custom Packaged Product": "Fallback profile for a packaged product not covered by a named category",
         }
         categories = {}
         for name, description in category_descriptions.items():
@@ -32,16 +43,27 @@ def init_db(db: Session):
 
         cat_general = categories["General Packaged Commodity"]
         cat_food = categories["Food & Beverages"]
+        cat_water = categories["Packaged Drinking Water"]
         cat_electronics = categories["Electronics & Appliances"]
+        cat_electrical = categories["Electrical Cables & Accessories"]
         cat_cosmetics = categories["Cosmetics, Ointments & Pharma Goods"]
+        cat_personal_care = categories["Personal Care Products"]
+        cat_cleaning = categories["Household Cleaning Products"]
         cat_textiles = categories["Apparel & Textiles"]
+        cat_footwear = categories["Footwear & Leather Goods"]
+        cat_toys = categories["Toys & Childcare Products"]
         cat_medical = categories["Medical Devices"]
+        cat_automotive = categories["Automotive Components & Lubricants"]
+        cat_tobacco = categories["Tobacco & Nicotine Products"]
+        cat_stationery = categories["Stationery & School Supplies"]
+        cat_agri = categories["Agricultural Inputs"]
 
         rules = []
         
         # Rule 6(1) Common Rules for ALL categories
-        for cat in [cat_general, cat_food, cat_electronics, cat_cosmetics, cat_textiles, cat_medical]:
+        for cat in categories.values():
             rules.extend([
+                _prototype_rule(cat.id, "COMMODITY_NAME", True, "Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(1)(b)"),
                 _prototype_rule(cat.id, "MANUFACTURER", True, "Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(1)(a)"),
                 _prototype_rule(cat.id, "NET_QUANTITY", True, "Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(1)(c)"),
                 _prototype_rule(cat.id, "MANUFACTURING_DATE", True, "Legal Metrology (Packaged Commodities) Rules, 2011 - Rule 6(1)(d), subject to product-specific provisions and exceptions"),
@@ -56,16 +78,55 @@ def init_db(db: Session):
             _prototype_rule(cat_food.id, "FSSAI_LICENSE", True, "Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended", food=True),
             _prototype_rule(cat_food.id, "BEST_BEFORE_DATE", True, "Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended", food=True),
             _prototype_rule(cat_food.id, "VEG_NON_VEG_LOGO", True, "Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended", food=True),
+            _prototype_rule(cat_food.id, "INGREDIENTS", True, "Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended", food=True),
+            _prototype_rule(cat_water.id, "FSSAI_LICENSE", True, "Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended", food=True),
+            _prototype_rule(cat_water.id, "BEST_BEFORE_DATE", True, "Food Safety and Standards (Labelling and Display) Regulations, 2020, as amended", food=True),
+            _prototype_rule(cat_water.id, "SOURCE_NAME", True, "Food Safety and Standards (Food Products Standards and Food Additives) Regulations, as amended", food=True),
         ])
 
         # Specific Additions: Electronics
         rules.extend([
             _prototype_rule(cat_electronics.id, "BIS_MARK", False, "Applicable BIS / quality-control requirements, if the product is covered"),
+            _prototype_rule(cat_electronics.id, "MODEL", True, "Consumer product identification and applicable quality-control requirements"),
+            _prototype_rule(cat_electronics.id, "COUNTRY_OF_ORIGIN", False, "Legal Metrology (Packaged Commodities) Rules, 2011 - importer/origin declarations where applicable"),
+            _prototype_rule(cat_electronics.id, "E_WASTE_INFO", False, "E-Waste (Management) Rules, as amended, where applicable"),
+            _prototype_rule(cat_electrical.id, "BIS_MARK", False, "Applicable BIS / quality-control requirements, if the product is covered"),
+            _prototype_rule(cat_electrical.id, "MODEL", True, "Consumer product identification and applicable quality-control requirements"),
         ])
         
         # Specific Additions: Cosmetics
         rules.extend([
             _prototype_rule(cat_cosmetics.id, "BATCH_CODE", True, "Drugs and Cosmetics Rules, 1945, and product-specific requirements"),
+            _prototype_rule(cat_cosmetics.id, "EXPIRY_DATE", True, "Drugs and Cosmetics Rules, 1945, and product-specific requirements"),
+            _prototype_rule(cat_cosmetics.id, "INGREDIENTS", True, "Drugs and Cosmetics Rules, 1945, and product-specific requirements"),
+            _prototype_rule(cat_personal_care.id, "BATCH_CODE", True, "Drugs and Cosmetics Rules, 1945, and product-specific requirements"),
+            _prototype_rule(cat_personal_care.id, "EXPIRY_DATE", True, "Drugs and Cosmetics Rules, 1945, and product-specific requirements"),
+            _prototype_rule(cat_personal_care.id, "INGREDIENTS", True, "Drugs and Cosmetics Rules, 1945, and product-specific requirements"),
+            _prototype_rule(cat_cleaning.id, "BATCH_CODE", True, "Applicable product-safety and packaged-commodity requirements"),
+            _prototype_rule(cat_cleaning.id, "HAZARD_WARNING", True, "Applicable product-safety and chemical labelling requirements"),
+            _prototype_rule(cat_cleaning.id, "INGREDIENTS", False, "Applicable product-safety and chemical labelling requirements"),
+        ])
+
+        rules.extend([
+            _prototype_rule(cat_textiles.id, "SIZE", True, "Legal Metrology and textile labelling requirements, where applicable"),
+            _prototype_rule(cat_textiles.id, "FIBRE_CONTENT", True, "Textile labelling requirements, subject to product and sector applicability"),
+            _prototype_rule(cat_textiles.id, "COUNTRY_OF_ORIGIN", False, "Legal Metrology (Packaged Commodities) Rules, 2011 - importer/origin declarations where applicable"),
+            _prototype_rule(cat_footwear.id, "SIZE", True, "Footwear labelling requirements, subject to product and sector applicability"),
+            _prototype_rule(cat_footwear.id, "MATERIAL", False, "Footwear and leather product labelling requirements, where applicable"),
+            _prototype_rule(cat_toys.id, "AGE_GROUP", True, "Toy safety and labelling requirements, subject to product and age group"),
+            _prototype_rule(cat_toys.id, "HAZARD_WARNING", True, "Toy safety and labelling requirements, subject to product and age group"),
+            _prototype_rule(cat_medical.id, "MODEL", True, "Medical Devices Rules, 2017, as amended"),
+            _prototype_rule(cat_medical.id, "SERIAL_NUMBER", False, "Medical Devices Rules, 2017, as amended, where applicable"),
+            _prototype_rule(cat_medical.id, "LICENSE_NO", True, "Medical Devices Rules, 2017, as amended"),
+            _prototype_rule(cat_medical.id, "STERILE_STATUS", False, "Medical Devices Rules, 2017, as amended, where applicable"),
+            _prototype_rule(cat_automotive.id, "MODEL", True, "Applicable automotive product and packaged-commodity requirements"),
+            _prototype_rule(cat_automotive.id, "BATCH_CODE", False, "Applicable automotive product and safety requirements"),
+            _prototype_rule(cat_tobacco.id, "HEALTH_WARNING", True, "Cigarettes and Other Tobacco Products (Packaging and Labelling) Rules, as amended"),
+            _prototype_rule(cat_tobacco.id, "BATCH_CODE", True, "Applicable tobacco packaging and traceability requirements"),
+            _prototype_rule(cat_stationery.id, "COUNTRY_OF_ORIGIN", False, "Legal Metrology (Packaged Commodities) Rules, 2011 - importer/origin declarations where applicable"),
+            _prototype_rule(cat_agri.id, "BATCH_CODE", True, "Applicable agricultural-input labelling requirements"),
+            _prototype_rule(cat_agri.id, "LICENSE_NO", True, "Applicable fertiliser, seed or pesticide licensing requirements"),
+            _prototype_rule(cat_agri.id, "EXPIRY_DATE", False, "Applicable agricultural-input labelling requirements, where applicable"),
         ])
 
         # Seed/update only the known starter rows. Existing scans and unrelated

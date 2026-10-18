@@ -40,6 +40,31 @@ class RuleEngineTests(unittest.TestCase):
         self.assertEqual(CONFIRMED_VIOLATION, checks[0]["status"])
         self.assertEqual(CONFIRMED_VIOLATION, overall_status(checks))
 
+    def test_missing_tags_are_only_derived_from_confirmed_evidence(self):
+        rules = [{"tag": "MRP", "is_mandatory": True}]
+        unresolved = evaluate_rules(rules, [])
+        self.assertEqual(UNRESOLVED, unresolved[0]["status"])
+        self.assertEqual([], [item["tag"] for item in unresolved if item["status"] == CONFIRMED_VIOLATION])
+
+        confirmed_missing = evaluate_rules(rules, [{
+            "tag": "MRP",
+            "text": "Readable package panel explicitly states MRP is not printed",
+            "confidence": 0.98,
+            "finding_status": CONFIRMED_VIOLATION,
+            "failure_reason": "A reviewer-confirmed readable panel states the mandatory MRP declaration is absent.",
+        }])
+        self.assertEqual(CONFIRMED_VIOLATION, confirmed_missing[0]["status"])
+
+    def test_low_confidence_extraction_is_unresolved(self):
+        checks = evaluate_rules(self.rules, [{
+            "tag": "MRP",
+            "text": "MRP Rs. 105.41",
+            "confidence": 0.31,
+            "finding_status": "DETECTED",
+        }])
+        self.assertEqual(UNRESOLVED, checks[0]["status"])
+        self.assertEqual(UNRESOLVED, overall_status(checks))
+
     def test_institutional_context_does_not_claim_mrp_failure(self):
         checks = evaluate_rules(self.rules, [], {"is_institutional": True})
         self.assertEqual(NOT_APPLICABLE, checks[0]["status"])

@@ -176,6 +176,17 @@ def analyze_ar_scan(
         confirmed_tags = [check["tag"] for check in checks if check["status"] == CONFIRMED_VIOLATION]
         package_status = "NO_FLAGS" if overall == "PASS" else "POTENTIAL_ISSUES"
 
+        # Keep the per-image response and the persisted result on the same
+        # evidence-aware contract. A legacy `missing_tags` value is reserved
+        # for confirmed violations; checks that could not be verified remain
+        # explicitly unresolved and must never be rendered as missing.
+        for result in results:
+            result["analysis"]["missing_tags"] = confirmed_tags
+            result["analysis"]["confirmed_violation_tags"] = confirmed_tags
+            result["analysis"]["unresolved_tags"] = unresolved_tags
+            result["analysis"]["status"] = package_status
+            result["analysis"]["package_checks"] = checks
+
         package_result = {
             "scan_schema_version": "2.0",
             "overall_status": overall,
@@ -226,8 +237,13 @@ def analyze_ar_scan(
 
         # Per-image fields remain for the current Flutter view, while the
         # package-level checks carry the actual evidence-aware conclusion.
+        # `missing_tags` is a legacy UI field and must contain only evidence-
+        # backed confirmed findings. An unread or absent OCR value is exposed
+        # separately as `unresolved_tags`; it is never a confirmed absence.
         for result in results:
-            result["analysis"]["missing_tags"] = unresolved_tags
+            result["analysis"]["missing_tags"] = confirmed_tags
+            result["analysis"]["confirmed_violation_tags"] = confirmed_tags
+            result["analysis"]["unresolved_tags"] = unresolved_tags
             result["analysis"]["status"] = package_status
             result["analysis"]["package_checks"] = checks
         return {

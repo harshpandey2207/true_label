@@ -11,6 +11,12 @@ Status: prototype catalogue `prototype-2026-10`, reviewed for source links on 20
 
 The Department’s rules page currently lists the 2011 Rules and a series of amendments. This project therefore records every seeded rule as `needs_legal_review`: the source links support a reviewer’s traceability work but do not prove that the implementation is current for a product, package, date, exemption, state, or sector.
 
+## Product profiles available in the application
+
+The scanner and Label Draft Studio share the following 17 broad profiles: General Packaged Commodity; Food & Beverages; Packaged Drinking Water; Electronics & Appliances; Electrical Cables & Accessories; Cosmetics, Ointments & Pharma Goods; Personal Care Products; Household Cleaning Products; Apparel & Textiles; Footwear & Leather Goods; Toys & Childcare Products; Medical Devices; Automotive Components & Lubricants; Tobacco & Nicotine Products; Stationery & School Supplies; Agricultural Inputs; and Other / Custom Packaged Product (a generic fallback when a named profile does not fit).
+
+Each profile seeds the common packaged-commodity checks plus a small set of sector-specific review checks. “Seeded” means the check is present and traceable in the prototype catalogue; it does not mean every exemption, amendment, state rule, material, sale channel or product-specific standard has been encoded.
+
 ## Implemented evidence checks
 
 | Tag | General package | Food | Cosmetics / ointments / pharma | What automation does | Current decision boundary |
@@ -23,8 +29,11 @@ The Department’s rules page currently lists the 2011 Rules and a series of ame
 | Language check | Required in seeded catalogue | Required in seeded catalogue | Required in seeded catalogue | Not automatically confirmed by the current OCR parser | Remains unresolved unless a reviewer confirms it; script/language presence alone would not prove sector-specific compliance |
 | Unit sale price | Conditional | Conditional | Conditional | Marked not applicable until package-type conditions are known | Human applicability decision required |
 | FSSAI licence / best-before / veg mark | Not applicable | Seeded required | Not applicable | The rules are seeded for structured review; current parser only recognises FSSAI text | Food-specific validation is not yet complete |
-| Batch code | Not seeded for every category | Not seeded for every category | Seeded required | Looks for batch/lot wording | Format and product-specific rules require review |
-| BIS mark | Not applicable | Not applicable | Not applicable | Conditional metadata only | Coverage and standard must be established first |
+| Batch code | Conditional by profile | Conditional by profile | Seeded required for relevant profiles | Looks for batch/lot wording | Format and product-specific rules require review |
+| BIS / ISI mark | Conditional for electrical/electronic profiles | Not applicable | Not applicable | Looks for BIS/ISI text | Coverage and standard must be established first |
+| Country of origin | Conditional | Conditional | Conditional | Looks for origin/import wording | Importer status and applicable sector rule require review |
+| Ingredients / composition | Conditional | Required for food/cosmetic profiles | Required for relevant profiles | Looks for ingredients/composition wording | Completeness, allergens and format require review |
+| Safety / health warning | Conditional | Conditional | Required for relevant toy, cleaning and tobacco profiles | Looks for warning/caution/health-warning text | Exact statutory wording and prominence require review |
 
 ## Verdict semantics
 

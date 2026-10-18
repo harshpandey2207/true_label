@@ -7,13 +7,40 @@ from sqlalchemy.orm import Session
 
 from backend.app.api.security import get_current_user, hash_password, require_roles
 from backend.app.db.database import get_db
-from backend.app.db.models import AuditEvent, ComplianceRule, EscalationCase, LabelDraftRecord, NoticeRecord, PaymentRecord, ProductCategory, ProductRecord, ScanRecord, UserAccount
+from backend.app.db.models import AuditEvent, ComplianceReportRecord, ComplianceRule, EscalationCase, LabelDraftRecord, NoticeRecord, PaymentRecord, ProductCategory, ProductRecord, ScanRecord, UserAccount
 
 router = APIRouter(tags=["Workspace"])
 
 
 def _timestamp(value) -> str | None:
     return value.isoformat() + "Z" if value is not None else None
+
+
+def _normalise_scan_result(result) -> dict:
+    """Normalize legacy persisted scan JSON without mutating the database.
+
+    Older scans stored unresolved OCR tags in ``missing_tags``. History must
+    use the same evidence-aware contract as new scans, so the compatibility
+    field is rebuilt from confirmed package findings when a record is read.
+    """
+    payload = dict(result or {})
+    confirmed = [str(value) for value in payload.get("confirmed_violation_tags", [])]
+    unresolved = [str(value) for value in payload.get("unresolved_tags", [])]
+    normalised_sides = []
+    for raw_side in payload.get("results", []) or []:
+        side = dict(raw_side or {})
+        analysis = dict(side.get("analysis") or {})
+        side_confirmed = [str(value) for value in analysis.get("confirmed_violation_tags", confirmed)]
+        side_unresolved = [str(value) for value in analysis.get("unresolved_tags", unresolved)]
+        analysis["missing_tags"] = side_confirmed
+        analysis["confirmed_violation_tags"] = side_confirmed
+        analysis["unresolved_tags"] = side_unresolved
+        side["analysis"] = analysis
+        normalised_sides.append(side)
+    payload["results"] = normalised_sides
+    payload["confirmed_violation_tags"] = confirmed
+    payload["unresolved_tags"] = unresolved
+    return payload
 
 
 class ProductInput(BaseModel):
@@ -175,7 +202,7 @@ def list_scans(user: UserAccount = Depends(get_current_user), db: Session = Depe
         "user_id": row.user_id,
         "category": row.category,
         "status": row.status,
-        "result": row.result,
+        "result": _normalise_scan_result(row.result),
         "image_names": row.image_names,
         "created_at": _timestamp(row.created_at),
     } for row in records]}
@@ -306,6 +333,28 @@ def admin_list_rules(user: UserAccount = Depends(require_roles("admin", "inspect
         "evidence_requirement": rule.evidence_requirement,
         "automated_scope": "Evidence-aware presence checks only. Applicability, exemptions, exact format, prominence and current amendments require human review.",
     } for rule in rules]}
+
+
+@router.get("/admin/overview")
+def admin_overview(user: UserAccount = Depends(require_roles("admin")), db: Session = Depends(get_db)):
+    """Return live aggregate metrics for the administrator workspace."""
+    scans = db.query(ScanRecord).all()
+    reports = db.query(ComplianceReportRecord).count()
+    return {
+        "scan_count": len(scans),
+        "user_count": db.query(UserAccount).count(),
+        "category_count": db.query(ProductCategory).count(),
+        "rule_count": db.query(ComplianceRule).count(),
+        "report_count": reports,
+        "escalation_count": db.query(EscalationCase).count(),
+        "unresolved_scan_count": sum(1 for scan in scans if (scan.result or {}).get("overall_status") == "UNRESOLVED"),
+        "confirmed_violation_count": sum(1 for scan in scans if (scan.result or {}).get("overall_status") == "CONFIRMED_VIOLATION"),
+        "pass_scan_count": sum(1 for scan in scans if (scan.result or {}).get("overall_status") == "PASS"),
+        "by_category": [
+            {"category": category, "count": count}
+            for category, count in db.query(ScanRecord.category, func.count(ScanRecord.id)).group_by(ScanRecord.category).order_by(func.count(ScanRecord.id).desc()).all()
+        ],
+    }
 
 
 @router.patch("/admin/rules/{rule_id}")

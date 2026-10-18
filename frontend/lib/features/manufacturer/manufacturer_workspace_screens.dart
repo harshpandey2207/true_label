@@ -4,15 +4,9 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/api_service.dart';
 import '../../core/report_viewer.dart';
 import '../../core/svg_export.dart';
+import '../../core/product_catalog.dart';
 
-const _workspaceCategories = <String>[
-  'General Packaged Commodity',
-  'Food & Beverages',
-  'Electronics & Appliances',
-  'Cosmetics, Ointments & Pharma Goods',
-  'Apparel & Textiles',
-  'Medical Devices',
-];
+const _workspaceCategories = productCategories;
 
 String _when(dynamic value) {
   final date = DateTime.tryParse(value?.toString() ?? '')?.toLocal();
@@ -42,7 +36,9 @@ String _scanNotes(Map<String, dynamic> scan) {
       if (message != null && message.isNotEmpty) lines.add('  $message');
     }
     final missing = (analysis['missing_tags'] as List? ?? const []).map((value) => value.toString()).toList();
-    if (missing.isNotEmpty) lines.add('Not detected: ${missing.join(', ')}');
+    if (missing.isNotEmpty) lines.add('Confirmed missing or incorrect: ${missing.join(', ')}');
+    final unresolved = (analysis['unresolved_tags'] as List? ?? const []).map((value) => value.toString()).toList();
+    if (unresolved.isNotEmpty) lines.add('Unable to verify (not confirmed absent): ${unresolved.join(', ')}');
     for (final warning in analysis['warnings'] as List? ?? const []) {
       lines.add('Review note: $warning');
     }
@@ -57,6 +53,8 @@ String _scanMethod(Map<String, dynamic> scan) {
   final analysis = Map<String, dynamic>.from(((sides.first as Map)['analysis'] as Map?) ?? const {});
   return analysis['ocr_engine']?.toString() == 'paddle'
       ? 'PaddleOCR running locally'
+      : analysis['ocr_engine']?.toString() == 'rapidocr'
+          ? 'RapidOCR running locally'
       : analysis['ocr_engine']?.toString() == 'unavailable'
           ? 'Text recognition was not configured; images were saved for manual review'
           : 'Configured local text recognition';
