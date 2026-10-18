@@ -12,6 +12,7 @@ import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/report_viewer.dart';
 import '../../core/api_service.dart';
+import '../../core/product_catalog.dart';
 import 'mock_data.dart';
 
 class AdminDashboard extends StatefulWidget {
@@ -466,59 +467,188 @@ class _AdminSampleAnalyticsPanel extends StatelessWidget {
     final theme = Theme.of(context);
     final sampleScans = [44.0, 36.0, 31.0, 27.0, 24.0, 20.0];
     final sampleLabels = ['Maha.', 'UP', 'Delhi', 'J&K', 'AP', 'Karn.'];
-    final sampleViolations = regionalData.fold<int>(0, (sum, item) => sum + (item['violations'] as int));
-    final sampleCompliant = regionalData.fold<int>(0, (sum, item) => sum + (item['compliant'] as int));
+    final sampleViolations = regionalData.fold<int>(
+      0,
+      (sum, item) => sum + (item['violations'] as int),
+    );
+    final sampleCompliant = regionalData.fold<int>(
+      0,
+      (sum, item) => sum + (item['compliant'] as int),
+    );
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(18),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Regional analytics', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('Illustrative demo distribution — not government enforcement data.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 230,
-            child: BarChart(BarChartData(
-              maxY: 50,
-              gridData: const FlGridData(show: true, drawVerticalLine: false),
-              borderData: FlBorderData(show: false),
-              titlesData: FlTitlesData(
-                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 30)),
-                bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) {
-                  final index = value.toInt();
-                  return index >= 0 && index < sampleLabels.length ? Padding(padding: const EdgeInsets.only(top: 6), child: Text(sampleLabels[index], style: theme.textTheme.labelSmall)) : const SizedBox.shrink();
-                })),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Regional analytics',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
               ),
-              barGroups: [for (var i = 0; i < sampleScans.length; i++) BarChartGroupData(x: i, barRods: [BarChartRodData(toY: sampleScans[i], width: 18, borderRadius: BorderRadius.circular(4), color: theme.colorScheme.primary)])],
-            )),
-          ),
-          const SizedBox(height: 8),
-          Text('Sample scan volume by selected state', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: SizedBox(height: 170, child: PieChart(PieChartData(centerSpaceRadius: 38, sectionsSpace: 2, sections: [
-              PieChartSectionData(value: sampleCompliant.toDouble(), color: Colors.teal, title: '$sampleCompliant', radius: 44, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              PieChartSectionData(value: sampleViolations.toDouble(), color: Colors.deepOrange, title: '$sampleViolations', radius: 44, titleStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ])))),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Sample outcome mix', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: 8),
-              const _LegendDot(color: Colors.teal, label: 'Screened without sample flags'),
-              const SizedBox(height: 6),
-              const _LegendDot(color: Colors.deepOrange, label: 'Illustrative review flags'),
-              const SizedBox(height: 8),
-              Text('Use live persisted scans above for operational decisions.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ])),
-          ]),
-          const SizedBox(height: 16),
-          Text('India state-wise heatmap', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text('Hover or tap a region for the illustrative scan/flag distribution.', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 8),
-          SizedBox(height: 390, child: InteractiveGeographicHeatmap(sharedData: regionalData)),
-        ]),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Illustrative demo distribution — not government enforcement data.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 230,
+              child: BarChart(
+                BarChartData(
+                  maxY: 50,
+                  gridData: const FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                  ),
+                  borderData: FlBorderData(show: false),
+                  titlesData: FlTitlesData(
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    leftTitles: const AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 30,
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          final index = value.toInt();
+                          return index >= 0 && index < sampleLabels.length
+                              ? Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    sampleLabels[index],
+                                    style: theme.textTheme.labelSmall,
+                                  ),
+                                )
+                              : const SizedBox.shrink();
+                        },
+                      ),
+                    ),
+                  ),
+                  barGroups: [
+                    for (var i = 0; i < sampleScans.length; i++)
+                      BarChartGroupData(
+                        x: i,
+                        barRods: [
+                          BarChartRodData(
+                            toY: sampleScans[i],
+                            width: 18,
+                            borderRadius: BorderRadius.circular(4),
+                            color: theme.colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Sample scan volume by selected state',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 170,
+                    child: PieChart(
+                      PieChartData(
+                        centerSpaceRadius: 38,
+                        sectionsSpace: 2,
+                        sections: [
+                          PieChartSectionData(
+                            value: sampleCompliant.toDouble(),
+                            color: Colors.teal,
+                            title: '$sampleCompliant',
+                            radius: 44,
+                            titleStyle: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          PieChartSectionData(
+                            value: sampleViolations.toDouble(),
+                            color: Colors.deepOrange,
+                            title: '$sampleViolations',
+                            radius: 44,
+                            titleStyle: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Sample outcome mix',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const _LegendDot(
+                        color: Colors.teal,
+                        label: 'Screened without sample flags',
+                      ),
+                      const SizedBox(height: 6),
+                      const _LegendDot(
+                        color: Colors.deepOrange,
+                        label: 'Illustrative review flags',
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Use live persisted scans above for operational decisions.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'India state-wise heatmap',
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Hover or tap a region for the illustrative scan/flag distribution.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 390,
+              child: InteractiveGeographicHeatmap(sharedData: regionalData),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -529,7 +659,19 @@ class _LegendDot extends StatelessWidget {
   final Color color;
   final String label;
   @override
-  Widget build(BuildContext context) => Row(children: [Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)), const SizedBox(width: 8), Expanded(child: Text(label, style: Theme.of(context).textTheme.bodySmall))]);
+  Widget build(BuildContext context) => Row(
+    children: [
+      Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+      ),
+    ],
+  );
 }
 
 class _LegacyOverviewScreen extends StatelessWidget {
@@ -1413,6 +1555,7 @@ class _PendingViolationsScreenState extends State<_PendingViolationsScreen> {
   late Future<Map<String, dynamic>> _cases;
   String _query = '';
   String _statusFilter = 'All';
+  final Set<String> _demoNotices = {};
 
   @override
   void initState() {
@@ -1441,21 +1584,130 @@ class _PendingViolationsScreenState extends State<_PendingViolationsScreen> {
     );
   }
 
-  List<Map<String, dynamic>> _demoCases() => mockViolations.take(10).map((item) => {
-    ...item,
-    'sample': true,
-    'category': item['product'] == 'AquaPure 1L' ? 'Food & Beverages' : 'General Packaged Commodity',
-    'scan_id': 'DEMO-${item['id']}',
-    'note': 'Illustrative sample case only. No government notice, penalty or enforcement record.',
-    'evidence': ['Package-side photo (sample)', 'Rule reference: ${item['violation']}'],
-  }).toList();
+  Future<void> _openReport(Map<String, dynamic> item) async {
+    final rawId = item['scan_id'];
+    final scanId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+    if (item['sample'] == true || scanId == null) {
+      ReportViewer.showPdfDialog(
+        context: context,
+        reportId: item['id']?.toString() ?? 'DEMO-REPORT',
+        product: item['product']?.toString() ?? 'Sample product',
+        findingsOrNotes:
+            '${item['violation'] ?? 'Potential label issue'}\n\nIllustrative screening report for demonstration only. This is not an official finding or enforcement document.',
+        noFlagsDetected: false,
+      );
+      return;
+    }
+    final report = await ApiService.createComplianceReport(scanId);
+    if (!mounted) return;
+    final downloadUrl = report['download_url']?.toString();
+    if (report['status'] == 'ERROR' || downloadUrl == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            report['error']?.toString() ?? 'Could not open the PDF report.',
+          ),
+        ),
+      );
+      return;
+    }
+    ReportViewer.showStoredPdfDialog(
+      context: context,
+      reportCode: report['report_code']?.toString() ?? 'TLR-$scanId',
+      pdfBytes: ApiService.getBytes(downloadUrl),
+    );
+  }
+
+  Future<void> _issueDemoNotice(Map<String, dynamic> item) async {
+    final noticeKey =
+        item['id']?.toString() ?? item['scan_id']?.toString() ?? 'case';
+    final owner = TextEditingController(
+      text: item['business_owner']?.toString() ?? 'Business owner',
+    );
+    final details = TextEditingController(
+      text:
+          item['violation']?.toString() ??
+          'Potential non-compliance identified during screening',
+    );
+    final issued = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Issue demo notice'),
+        content: SizedBox(
+          width: 460,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Preview a notice for the listed business owner. This demo does not send an official or external notice.',
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: owner,
+                decoration: const InputDecoration(
+                  labelText: 'Business owner / manufacturer',
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: details,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(labelText: 'Finding'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Issue demo notice'),
+          ),
+        ],
+      ),
+    );
+    owner.dispose();
+    details.dispose();
+    if (issued == true && mounted) setState(() => _demoNotices.add(noticeKey));
+  }
+
+  List<Map<String, dynamic>> _demoCases() => mockViolations
+      .take(10)
+      .map(
+        (item) => {
+          ...item,
+          'sample': true,
+          'category': item['product'] == 'AquaPure 1L'
+              ? 'Food & Beverages'
+              : 'General Packaged Commodity',
+          'scan_id': 'DEMO-${item['id']}',
+          'note': 'Illustrative sample case only. No government notice, penalty or enforcement record.',
+          'evidence': [
+            'Package-side photo (sample)',
+            'Rule reference: ${item['violation']}',
+          ],
+        },
+      )
+      .toList();
 
   bool _matches(Map<String, dynamic> item) {
     final needle = _query.trim().toLowerCase();
     final status = item['status']?.toString() ?? '';
-    if (_statusFilter != 'All' && !status.toLowerCase().contains(_statusFilter.toLowerCase())) return false;
+    if (_statusFilter != 'All' &&
+        !status.toLowerCase().contains(_statusFilter.toLowerCase()))
+      return false;
     if (needle.isEmpty) return true;
-    return [item['id'], item['product'], item['category'], item['violation'], item['inspector']]
+    return [
+          item['id'],
+          item['product'],
+          item['category'],
+          item['violation'],
+          item['inspector'],
+        ]
         .map((value) => value?.toString().toLowerCase() ?? '')
         .any((value) => value.contains(needle));
   }
@@ -1469,85 +1721,225 @@ class _PendingViolationsScreenState extends State<_PendingViolationsScreen> {
     final textMuted = theme.brightness == Brightness.dark
         ? Colors.white70
         : Colors.black87;
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Violation reports', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-      const SizedBox(height: 6),
-      Text('Live inspector escalations plus clearly marked illustrative cases for the local demo. No government notice, fine, or external message is sent.', style: TextStyle(color: textMuted)),
-      const SizedBox(height: 16),
-      Row(children: [
-        Expanded(child: TextField(decoration: const InputDecoration(prefixIcon: Icon(Icons.search), labelText: 'Search cases, products or rules'), onChanged: (value) => setState(() => _query = value))),
-        const SizedBox(width: 12),
-        SizedBox(width: 150, child: DropdownButtonFormField<String>(value: _statusFilter, decoration: const InputDecoration(labelText: 'Status'), items: const ['All', 'Pending', 'Review', 'Resolved'].map((value) => DropdownMenuItem(value: value, child: Text(value))).toList(), onChanged: (value) => setState(() => _statusFilter = value ?? 'All'))),
-      ]),
-      const SizedBox(height: 16),
-      Expanded(child: FutureBuilder<Map<String, dynamic>>(future: _cases, builder: (context, snapshot) {
-        final liveItems = (snapshot.data?['items'] as List? ?? const []).map((raw) => Map<String, dynamic>.from(raw as Map)).toList();
-        final allItems = [..._demoCases(), ...liveItems].where(_matches).toList();
-        return ListView(children: [
-          if (snapshot.connectionState == ConnectionState.waiting) const LinearProgressIndicator(),
-          if (snapshot.data?['status'] == 'ERROR') Padding(padding: const EdgeInsets.only(bottom: 12), child: Text(snapshot.data?['error']?.toString() ?? 'Live cases could not be loaded; sample cases remain available.', style: TextStyle(color: theme.colorScheme.error))),
-          if (allItems.isEmpty) const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('No cases match this filter.'))),
-          ...allItems.map((violation) => _buildCaseCard(context, violation, theme, textMuted)),
-        ]);
-      })),
-    ]);
-  }
-
-  Widget _buildCaseCard(BuildContext context, Map<String, dynamic> violation, ThemeData theme, Color textMuted) {
-    final sample = violation['sample'] == true;
-    final evidence = (violation['evidence'] as List?)?.map((item) => item.toString()).toList() ?? const <String>[];
-    return Card(color: theme.cardColor, margin: const EdgeInsets.only(bottom: 14), child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Expanded(child: Text('${violation['product'] ?? violation['category'] ?? 'Product'}', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
-        Chip(label: Text(sample ? 'DEMO SAMPLE' : 'LIVE CASE'), backgroundColor: sample ? Colors.blue.withValues(alpha: .12) : Colors.orange.withValues(alpha: .14)),
-      ]),
-      const SizedBox(height: 4),
-      Text('${violation['category'] ?? 'Uncategorised'} · scan ${violation['scan_id'] ?? 'n/a'} · case ${violation['id'] ?? 'n/a'}', style: theme.textTheme.bodySmall?.copyWith(color: textMuted)),
-      const SizedBox(height: 12),
-      Text(violation['violation']?.toString() ?? 'Review finding', style: theme.textTheme.titleMedium?.copyWith(color: Colors.deepOrange, fontWeight: FontWeight.w700)),
-      const SizedBox(height: 8),
-      Text('Status: ${violation['status'] ?? 'pending'}', style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-      if (violation['inspector'] != null) Text('Reported by: ${violation['inspector']}', style: theme.textTheme.bodySmall?.copyWith(color: textMuted)),
-      if (violation['note'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(violation['note'].toString(), style: theme.textTheme.bodySmall?.copyWith(color: textMuted))),
-      if (evidence.isNotEmpty) ...[const SizedBox(height: 10), Text('Evidence attached', style: theme.textTheme.labelLarge), Wrap(spacing: 6, runSpacing: 6, children: evidence.map((item) => Chip(avatar: const Icon(Icons.attachment, size: 15), label: Text(item))).toList())],
-      if (!sample && violation['id'] is int) ...[const SizedBox(height: 10), Wrap(spacing: 10, children: [FilledButton.icon(onPressed: () => _setStatus(violation['id'] as int, 'in_review'), icon: const Icon(Icons.rate_review), label: const Text('Mark in review')), OutlinedButton.icon(onPressed: () => _setStatus(violation['id'] as int, 'resolved'), icon: const Icon(Icons.check), label: const Text('Mark resolved'))])],
-    ])));
-  }
-
-  void _showNoticeDialog(BuildContext context, String product) {
-    final theme = Theme.of(context);
-    final textMuted = theme.brightness == Brightness.dark
-        ? Colors.white70
-        : Colors.black87;
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: theme.dialogBackgroundColor,
-        title: Text(
-          'Notice workflow demo',
-          style: TextStyle(
-            color: theme.brightness == Brightness.dark
-                ? Colors.white
-                : Colors.black,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Violation reports',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w800,
           ),
         ),
-        content: Text(
-          'This sample case is for $product. The app is not connected to a regulator or messaging service, so no notice can be issued or sent.',
+        const SizedBox(height: 6),
+        Text(
+          'Live inspector escalations plus clearly marked illustrative cases for the local demo. No government notice, fine, or external message is sent.',
           style: TextStyle(color: textMuted),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Close',
-              style: TextStyle(
-                color: theme.brightness == Brightness.dark
-                    ? Colors.white70
-                    : Colors.black87,
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                decoration: const InputDecoration(
+                  prefixIcon: Icon(Icons.search),
+                  labelText: 'Search cases, products or rules',
+                ),
+                onChanged: (value) => setState(() => _query = value),
               ),
             ),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 150,
+              child: DropdownButtonFormField<String>(
+                value: _statusFilter,
+                decoration: const InputDecoration(labelText: 'Status'),
+                items: const ['All', 'Pending', 'Review', 'Resolved']
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
+                onChanged: (value) =>
+                    setState(() => _statusFilter = value ?? 'All'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: FutureBuilder<Map<String, dynamic>>(
+            future: _cases,
+            builder: (context, snapshot) {
+              final liveItems = (snapshot.data?['items'] as List? ?? const [])
+                  .map((raw) => Map<String, dynamic>.from(raw as Map))
+                  .toList();
+              final allItems = [
+                ..._demoCases(),
+                ...liveItems,
+              ].where(_matches).toList();
+              return ListView(
+                children: [
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    const LinearProgressIndicator(),
+                  if (snapshot.data?['status'] == 'ERROR')
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        snapshot.data?['error']?.toString() ?? 'Live cases could not be loaded; sample cases remain available.',
+                        style: TextStyle(color: theme.colorScheme.error),
+                      ),
+                    ),
+                  if (allItems.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: Text('No cases match this filter.')),
+                    ),
+                  ...allItems.map(
+                    (violation) =>
+                        _buildCaseCard(context, violation, theme, textMuted),
+                  ),
+                ],
+              );
+            },
           ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCaseCard(
+    BuildContext context,
+    Map<String, dynamic> violation,
+    ThemeData theme,
+    Color textMuted,
+  ) {
+    final sample = violation['sample'] == true;
+    final evidence =
+        (violation['evidence'] as List?)
+            ?.map((item) => item.toString())
+            .toList() ??
+        const <String>[];
+    return Card(
+      color: theme.cardColor,
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    '${violation['product'] ?? violation['category'] ?? 'Product'}',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Chip(
+                  label: Text(sample ? 'DEMO SAMPLE' : 'LIVE CASE'),
+                  backgroundColor: sample
+                      ? Colors.blue.withValues(alpha: .12)
+                      : Colors.orange.withValues(alpha: .14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${violation['category'] ?? 'Uncategorised'} · scan ${violation['scan_id'] ?? 'n/a'} · case ${violation['id'] ?? 'n/a'}',
+              style: theme.textTheme.bodySmall?.copyWith(color: textMuted),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              violation['violation']?.toString() ?? 'Review finding',
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: Colors.deepOrange,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Status: ${violation['status'] ?? 'pending'}',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (violation['inspector'] != null)
+              Text(
+                'Reported by: ${violation['inspector']}',
+                style: theme.textTheme.bodySmall?.copyWith(color: textMuted),
+              ),
+            if (violation['note'] != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  violation['note'].toString(),
+                  style: theme.textTheme.bodySmall?.copyWith(color: textMuted),
+                ),
+              ),
+            if (evidence.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('Evidence attached', style: theme.textTheme.labelLarge),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: evidence
+                    .map(
+                      (item) => Chip(
+                        avatar: const Icon(Icons.attachment, size: 15),
+                        label: Text(item),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _openReport(violation),
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('Open PDF report'),
+                ),
+                if (violation['status']?.toString().toLowerCase().contains(
+                          'compliant',
+                        ) !=
+                        true &&
+                    violation['status']?.toString().toLowerCase() != 'resolved')
+                  FilledButton.icon(
+                    onPressed:
+                        _demoNotices.contains(violation['id']?.toString())
+                        ? null
+                        : () => _issueDemoNotice(violation),
+                    icon: const Icon(Icons.forward_to_inbox_outlined),
+                    label: Text(
+                      _demoNotices.contains(violation['id']?.toString())
+                          ? 'Demo notice issued'
+                          : 'Issue notice to owner',
+                    ),
+                  ),
+                if (!sample && violation['id'] is int) ...[
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _setStatus(violation['id'] as int, 'in_review'),
+                    icon: const Icon(Icons.rate_review),
+                    label: const Text('Mark in review'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () =>
+                        _setStatus(violation['id'] as int, 'resolved'),
+                    icon: const Icon(Icons.check),
+                    label: const Text('Mark resolved'),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1600,9 +1992,10 @@ class _RulesScreenState extends State<_RulesScreen> {
               label: const Text('Retry rules'),
             ),
           );
-        final rules = (snapshot.data?['items'] as List? ?? const [])
+        final apiRules = (snapshot.data?['items'] as List? ?? const [])
             .map((raw) => Map<String, dynamic>.from(raw as Map))
             .toList();
+        final rules = apiRules.isNotEmpty ? apiRules : _categoryRuleFallback();
         final categories = <String>{
           'All categories',
           ...rules.map(
@@ -1633,7 +2026,7 @@ class _RulesScreenState extends State<_RulesScreen> {
               ],
             ),
             Text(
-              '${rules.length} seeded checks across ${categories.length - 1} product profiles. Changes are recorded for review.',
+              '${rules.length} checks across ${categories.length - 1} product profiles. ${apiRules.isEmpty ? 'Showing the built-in demo catalogue while live rules are unavailable.' : 'Changes are recorded for review.'}',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -1690,10 +2083,15 @@ class _RulesScreenState extends State<_RulesScreen> {
                               maxLines: 3,
                               overflow: TextOverflow.ellipsis,
                             ),
-                            trailing: Switch(
-                              value: mandatory,
-                              onChanged: (value) => _toggle(rule, value),
-                            ),
+                            trailing: rule['id'] is int
+                                ? Switch(
+                                    value: mandatory,
+                                    onChanged: (value) => _toggle(rule, value),
+                                  )
+                                : const Tooltip(
+                                    message: 'Demo catalogue entry',
+                                    child: Icon(Icons.info_outline),
+                                  ),
                           ),
                         );
                       },
@@ -1703,6 +2101,81 @@ class _RulesScreenState extends State<_RulesScreen> {
         );
       },
     );
+  }
+
+  List<Map<String, dynamic>> _categoryRuleFallback() {
+    final extraFields = <String, List<String>>{
+      'Food & Beverages': [
+        'FSSAI_LICENSE',
+        'BEST_BEFORE_DATE',
+        'VEG_NON_VEG_LOGO',
+        'INGREDIENTS',
+      ],
+      'Packaged Drinking Water': [
+        'FSSAI_LICENSE',
+        'BEST_BEFORE_DATE',
+        'SOURCE_NAME',
+      ],
+      'Electronics & Appliances': [
+        'BIS_MARK',
+        'MODEL',
+        'COUNTRY_OF_ORIGIN',
+        'E_WASTE_INFO',
+      ],
+      'Electrical Cables & Accessories': ['BIS_MARK', 'MODEL'],
+      'Cosmetics, Ointments & Pharma Goods': [
+        'BATCH_CODE',
+        'EXPIRY_DATE',
+        'INGREDIENTS',
+      ],
+      'Personal Care Products': ['BATCH_CODE', 'EXPIRY_DATE', 'INGREDIENTS'],
+      'Household Cleaning Products': [
+        'BATCH_CODE',
+        'HAZARD_WARNING',
+        'INGREDIENTS',
+      ],
+      'Apparel & Textiles': ['SIZE', 'FIBRE_CONTENT', 'COUNTRY_OF_ORIGIN'],
+      'Footwear & Leather Goods': ['SIZE', 'MATERIAL'],
+      'Toys & Childcare Products': ['AGE_GROUP', 'HAZARD_WARNING'],
+      'Medical Devices': [
+        'MODEL',
+        'SERIAL_NUMBER',
+        'LICENSE_NO',
+        'STERILE_STATUS',
+      ],
+      'Automotive Components & Lubricants': ['MODEL', 'BATCH_CODE'],
+      'Tobacco & Nicotine Products': ['HEALTH_WARNING', 'BATCH_CODE'],
+      'Stationery & School Supplies': ['COUNTRY_OF_ORIGIN'],
+      'Agricultural Inputs': ['BATCH_CODE', 'LICENSE_NO', 'EXPIRY_DATE'],
+    };
+    return productCategories.expand((category) {
+      final fields = {
+        ...fieldsForProductCategory(category)
+            .map((field) => field.toUpperCase()),
+        ...(extraFields[category] ?? const <String>[]),
+      };
+      return fields.map(
+        (tag) => <String, dynamic>{
+          'category': category,
+          'tag': tag,
+          'is_mandatory': !{
+            'UNIT_SALE_PRICE',
+            'BIS_MARK',
+            'COUNTRY_OF_ORIGIN',
+            'E_WASTE_INFO',
+            'SOURCE_NAME',
+            'MATERIAL',
+            'SERIAL_NUMBER',
+            'STERILE_STATUS',
+            'EXPIRY_DATE',
+          }.contains(tag),
+          'legal_act_reference': tag.startsWith('FSSAI')
+              ? 'Food labelling and display requirements (verify current applicability)'
+              : 'Legal Metrology and applicable sector-specific requirements (verify current applicability)',
+          'automated_scope': 'Demo screening check: confirms declaration evidence only. Applicability and exemptions require review.',
+        },
+      );
+    }).toList();
   }
 }
 
@@ -2742,7 +3215,8 @@ class _LogoutScreen extends StatelessWidget {
         onPressed: () async {
           await ApiService.signOut();
           if (context.mounted) {
-            Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/login', (route) => false);
           }
         },
         child: Text(
