@@ -7,7 +7,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app \
+    TRUE_LABEL_ENABLE_CLOUD_OCR=1
 
 EXPOSE 8000
 

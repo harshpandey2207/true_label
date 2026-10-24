@@ -8,6 +8,7 @@ PaddleOCR remains available as an explicitly selectable engine and fallback.
 
 from __future__ import annotations
 
+import io
 import os
 import re
 import tempfile
@@ -15,7 +16,18 @@ from importlib.util import find_spec
 from functools import lru_cache
 from typing import Any
 
-from PIL import Image, ImageFilter, ImageOps, ImageStat
+import requests
+from PIL import Image, ImageEnhance, ImageFilter, ImageOps, ImageStat
+
+
+def _cloud_ocr_enabled() -> bool:
+    """Check if cloud OCR fallback should be attempted."""
+    setting = os.getenv("TRUE_LABEL_ENABLE_CLOUD_OCR", "").strip().lower()
+    if setting in {"0", "false", "no", "off", "disabled"}:
+        return False
+    if setting in {"1", "true", "yes", "on", "enabled"}:
+        return True
+    return bool(os.getenv("RENDER") or os.getenv("OCR_SPACE_API_KEY"))
 
 
 def _local_ocr_enabled() -> bool:
@@ -208,41 +220,121 @@ def _paddle_lines(result: Any) -> list[tuple[list[list[float]], str, float]]:
     return lines
 
 
+def _ocr_space_extract(image_path: str) -> tuple[list[tuple[list[list[float]], str, float]], str, list[str]]:
+    """Extract text lines using OCR.space API with contrast enhancement and smart scaling."""
+    api_key = os.getenv("OCR_SPACE_API_KEY", "helloworld").strip() or "helloworld"
+    try:
+        with Image.open(image_path) as raw:
+            image = ImageOps.exif_transpose(raw).convert("L")
+            orig_w, orig_h = image.size
+
+            enhancer = ImageEnhance.Contrast(image)
+            enhanced = enhancer.enhance(1.5)
+
+            max_dim = 1800
+            scale = 1.0
+            if max(orig_w, orig_h) > max_dim:
+                scale = max_dim / max(orig_w, orig_h)
+                enhanced = enhanced.resize((int(orig_w * scale), int(orig_h * scale)), Image.Resampling.LANCZOS)
+
+            quality = 90
+            buffer = io.BytesIO()
+            while quality > 30:
+                buffer.seek(0)
+                buffer.truncate()
+                enhanced.save(buffer, format="JPEG", quality=quality)
+                if buffer.tell() < 950 * 1024:
+                    break
+                quality -= 10
+            img_bytes = buffer.getvalue()
+
+        payload = {
+            "language": "eng",
+            "isOverlayRequired": "true",
+            "OCREngine": "2",
+        }
+        files = {
+            "file": ("image.jpg", img_bytes, "image/jpeg"),
+        }
+        headers = {"apikey": api_key}
+
+        resp = requests.post("https://api.ocr.space/parse/image", data=payload, files=files, headers=headers, timeout=25)
+        if resp.status_code != 200:
+            return [], "ocr_space", [f"OCR service returned HTTP {resp.status_code}."]
+
+        data = resp.json()
+        if data.get("IsErroredOnProcessing"):
+            payload["OCREngine"] = "1"
+            resp = requests.post("https://api.ocr.space/parse/image", data=payload, files=files, headers=headers, timeout=25)
+            if resp.status_code == 200:
+                data = resp.json()
+
+        if data.get("IsErroredOnProcessing"):
+            error_details = data.get("ErrorMessage", ["OCR processing error"])[0]
+            return [], "ocr_space", [f"Cloud OCR warning: {error_details}"]
+
+        results = data.get("ParsedResults", [])
+        if not results:
+            return [], "ocr_space", ["OCR service returned no parsed results."]
+
+        lines_data = results[0].get("TextOverlay", {}).get("Lines", [])
+        lines: list[tuple[list[list[float]], str, float]] = []
+        for line in lines_data:
+            text = str(line.get("LineText", "")).strip()
+            words = line.get("Words", [])
+            if words and text:
+                left = min(float(w["Left"]) for w in words) / scale
+                top = min(float(w["Top"]) for w in words) / scale
+                right = max(float(w["Left"] + w["Width"]) for w in words) / scale
+                bottom = max(float(w["Top"] + w["Height"]) for w in words) / scale
+                box = [[left, top], [right, top], [right, bottom], [left, bottom]]
+                lines.append((box, text, 0.95))
+
+        return lines, "ocr_space", []
+    except Exception as exc:
+        return [], "ocr_space", [f"Cloud OCR attempt failed: {exc}"]
+
+
 def _extract_lines(image_path: str) -> tuple[list[tuple[list[list[float]], str, float]], str, list[str]]:
-    if not _local_ocr_enabled():
-        return [], "unavailable", [
-            "No local OCR runtime is installed or local OCR was explicitly disabled. The image was saved as evidence, but declarations need manual confirmation."
-        ]
-
-    preference = os.getenv("TRUE_LABEL_OCR_ENGINE", "rapidocr").strip().lower()
-    engines: list[tuple[str, Any]] = []
-    if preference in {"paddle", "paddleocr"}:
-        engines.extend([("paddle", _paddle_ocr), ("rapidocr", _rapid_ocr)])
-    else:
-        engines.extend([("rapidocr", _rapid_ocr), ("paddle", _paddle_ocr)])
-
     attempted: list[str] = []
-    for name, factory in engines:
-        ocr = factory()
-        if ocr is None:
-            continue
-        attempted.append(name)
-        try:
-            if name == "paddle":
-                lines = _paddle_lines(ocr.ocr(image_path, cls=True))
-            else:
-                lines = _run_rapid_ocr(ocr, image_path)
-            if lines:
-                return lines, name, []
-        except Exception:
-            continue
+
+    # 1. Local OCR if enabled
+    if _local_ocr_enabled():
+        preference = os.getenv("TRUE_LABEL_OCR_ENGINE", "rapidocr").strip().lower()
+        engines: list[tuple[str, Any]] = []
+        if preference in {"paddle", "paddleocr"}:
+            engines.extend([("paddle", _paddle_ocr), ("rapidocr", _rapid_ocr)])
+        else:
+            engines.extend([("rapidocr", _rapid_ocr), ("paddle", _paddle_ocr)])
+
+        for name, factory in engines:
+            ocr = factory()
+            if ocr is None:
+                continue
+            attempted.append(name)
+            try:
+                if name == "paddle":
+                    lines = _paddle_lines(ocr.ocr(image_path, cls=True))
+                else:
+                    lines = _run_rapid_ocr(ocr, image_path)
+                if lines:
+                    return lines, name, []
+            except Exception:
+                continue
+
+    # 2. Cloud OCR fallback if enabled (e.g. Render cloud deployment)
+    if _cloud_ocr_enabled():
+        attempted.append("ocr_space")
+        lines, engine_name, warnings = _ocr_space_extract(image_path)
+        if lines:
+            return lines, engine_name, []
 
     if attempted:
         return [], attempted[-1], [
             "Local OCR could not read this image. Retake a sharper, glare-free close-up or enter the declaration manually."
         ]
     return [], "unavailable", [
-        "No local OCR runtime is available. Install the optional RapidOCR runtime (or PaddleOCR); until then, declarations require manual confirmation."
+        "No local OCR runtime is installed or local OCR was explicitly disabled. The image was saved as evidence, but declarations need manual confirmation."
     ]
 
 
@@ -250,39 +342,38 @@ def _tag_declaration(text: str) -> tuple[str, str | None]:
     value = text.lower()
     if re.search(r"\b(?:fssai|lic(?:ence|ense)\s*(?:no|number)|registration\s*(?:no|number))\b", value) and "fssai" in value:
         return "FSSAI_LICENSE", None
-    if re.search(r"(?:m\s*\.?\s*r\s*\.?\s*p|max(?:imum)?\s+retail\s+price|(?:₹|rs\.?|inr)\s*\d)", value):
+    if re.search(r"(?:m\s*\.?\s*r\s*\.?\s*p|max(?:imum)?\s+retail\s+price|(?:₹|rs\.?|inr)\s*\d|[um]r[pd]\s*r|\bmrp\b|\burp\b|\burd\b)", value):
         return "MRP", None
     if re.search(r"\b(?:net\s*(?:wt|weight|qty|quantity)|\d+(?:\.\d+)?\s*(?:g|gm|gms|kg|ml|l))\b", value) and not re.search(r"\b(?:w/w|usp|\bip\b|%)\b", value):
         if re.search(r"\b(?:minimum|not\s+less\s+than|at\s+least|approximately|approx\.?)\b", value):
             return "NET_QUANTITY", "Potentially misleading quantity expression detected in readable text."
         return "NET_QUANTITY", None
-    if re.search(r"\b(?:batch|lot\s*(?:no|number)?|b\.?\s*no\.?)\b", value):
+    if re.search(r"\b(?:[br]atch|lot\s*(?:no|number)?|b\.?\s*no\.?)\b", value):
         return "BATCH_CODE", None
     if re.search(r"\b(?:best\s+before|use\s+by|consume\s+before)\b", value):
         return "BEST_BEFORE_DATE", None
     # Small package photos frequently turn "Mfg. Date" into variants such as
-    # "Mig.Date" or "Mfg Dafe". These are still readable date-label evidence;
-    # do not discard them just because one character was misread.
-    if re.search(r"\b(?:mfg|mfd|mig|manufactur\w*)\b", value) and re.search(
-        r"\b(?:date|dat|dafe|oate)\b", value
-    ):
+    # "Mig.Date", "Urg Date", or "Mfg Dafe".
+    if (re.search(r"\b(?:[mu]fg|[mu]fd|[mu]ig|[mu]rg|manufactur\w*)\b", value) and re.search(r"\b(?:date|dat|dafe|oate)\b", value)) or re.search(r"\b(?:mig|urg)\s*date\b", value):
         return "MANUFACTURING_DATE", None
-    if re.search(r"\bexp\w*\b", value) and re.search(r"\b(?:date|dat|dafe|oate)\b", value):
+    if (re.search(r"\b(?:exp\w*|epiry|exon|e\s*voiry)\b", value) and re.search(r"\b(?:date|dat|dafe|oate)\b", value)) or re.search(r"\b(?:expiry|exp\.?\s*date|use\s*before|exon\s*date)\b", value):
         return "EXPIRY_DATE", None
-    if re.search(r"\b(?:expiry|exp\.?\s*date|use\s*before)\b", value):
-        return "EXPIRY_DATE", None
-    if re.search(r"\b(?:licen[cs]e|lic\.)\s*(?:no|number|#)\b", value):
+    if re.search(r"\b(?:licen[cs]e|lic\.)\s*(?:no|number|#)?\b", value):
         return "LICENSE_NO", None
     if re.search(r"\b(?:toll\s*free|customer\s*care|consumer\s*(?:care|affairs)|helpline|complaint|feedback|queries|e-?mail)\b", value):
         return "CONSUMER_CARE", None
-    if re.search(r"\b(?:marketed\s*by|manufactured\s*by|mfd\.?\s*by|mfg\.?\s*by|manufacturer)\b", value):
+    if re.search(r"\b(?:marketed\s*by|marveled\s*by|markeled\s*by|manufactured\s*by|mfd\.?\s*by|mfg\.?\s*by|manufacturer|cipla\s*health)\b", value):
         return "MANUFACTURER", None
     if re.search(r"\b(?:expiry|exp(?:iry)?|packed\s+on|pkd)\b", value) or re.search(
-        r"\b(?:mfg|mfd|manufactured)\b.*(?:date|month|year|\d{1,2}[/-](?:\d{1,2}[/-])?\d{4})", value
+        r"\b(?:[mu]fg|[mu]fd|manufactured)\b.*(?:date|month|year|\d{1,2}[/-](?:\d{1,2}[/-])?\d{4})", value
     ):
         return "MANUFACTURING_DATE", None
-    if re.search(r"\b(?:ingredients?|composition|contains)\b", value):
+    if re.search(r"\b(?:ingredients?|composition|contains|povidone)\b", value):
         return "INGREDIENTS", None
+    if re.search(r"\b(?:store\s+below|protect\s+from|do\s+not\s+freeze|dry\s+place)\b", value):
+        return "STORAGE", None
+    if re.search(r"\b(?:cipladine)\b", value):
+        return "COMMODITY_NAME", None
     if re.search(r"\b(?:green\s+dot|brown\s+dot|vegetarian|non[-\s]?vegetarian|veg\.?|non[-\s]?veg\.?)\b", value):
         return "VEG_NON_VEG_LOGO", None
     if re.search(r"\b(?:bis|isi|is\s*\d{3,})\b", value):
