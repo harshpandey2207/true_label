@@ -41,7 +41,16 @@ def root():
 
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "HEALTHY"}
+    from sqlalchemy import text
+    db_status = {"dialect": engine.dialect.name, "host": engine.url.host}
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        db_status["connected"] = True
+    except Exception as e:
+        db_status["connected"] = False
+        db_status["error"] = str(e)
+    return {"status": "HEALTHY", "database": db_status}
 
 # Mount the routes with a clean prefix
 app.include_router(scan_router, prefix="/scan", tags=["Scan"])
