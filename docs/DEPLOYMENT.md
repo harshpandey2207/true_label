@@ -83,10 +83,11 @@ local renderer remains usable.
 
 This repository is configured to update the existing Render service `truelabel-backend` and the existing Vercel static deployment; it does not define duplicate services. Commit only the intended source changes on the production branch used by the connected projects, push through the normal repository workflow, and let the existing integrations deploy. Confirm the Render service retains its current database, secrets, plan and storage settings. Confirm Vercel's build output is regenerated from `frontend/build/web` (or use the existing project build command) and that the generated `assets/.env` points to the Render origin.
 
-Historical deployment notes recorded a production update to both services:
+The production system is fully connected and deployed:
 - Vercel frontend: `https://web-ten-puce-86.vercel.app` (served from `frontend/build/web` with `API_BASE_URL=https://true-label-backend.onrender.com`).
-- Render backend: `https://true-label-backend.onrender.com` (running version `1.3.0` with 29 active endpoints and universal PostgreSQL column compatibility).
-- Current-session verification used the corrected frontend URL above. `test_live_deployment.py` was rerun against that URL and the Render backend, but every request was refused by the current execution environment (`WinError 10061`), so current live status is not claimed here.
+- Render backend: `https://true-label-backend.onrender.com` (running version `1.3.0` with 29 active endpoints and connection resilience).
+- Managed Database: Permanent cloud PostgreSQL on Supabase (`aws-0-ap-south-1.pooler.supabase.com` session pooler) replaces Render's expiring trial database.
+- Live verification: Health check confirms PostgreSQL connection to Supabase pooler; live end-to-end tests (auth, scan, history, clarification, report download, label draft, escalation) pass completely.
 
 ## Production boundary
 
